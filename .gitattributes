@@ -1,0 +1,3 @@
+*.sh text eol=lf
+pintos/* text eol=lf
+utils/* text eol=lf
