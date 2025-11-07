@@ -94,10 +94,9 @@ timer_sleep (int64_t ticks) {
 
 	//인터럽트 걸고 들어오는거니까 있어야지...
 	ASSERT (intr_get_level () == INTR_ON);
-	//사악한 코드는 당장 없어져야...!
-	// while (timer_elapsed (start) < ticks)
-	// 	thread_yield ();
-	thread_sleep(start + ticks);
+    /* Project 1 - Alarm Clock */
+    thread_sleep(start + ticks);
+    /* ~Alarm Clock */
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -131,8 +130,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	//사실상 이친구가 스케줄러
 	thread_tick ();
-	/*project1-1 wait 함수 추가*/
-	thread_awake(ticks);
+    thread_awake (ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
