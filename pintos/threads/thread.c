@@ -363,39 +363,6 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-
-//thread_sleep 추가
-void 
-thread_sleep(int64_t ticks)
-{
-	enum intr_level old_level;
-	old_level = intr_disable ();
-
-	struct thread *curr = thread_current();
-	ASSERT(curr != idle_thread);
-	curr->wake_tick = ticks;
-	list_insert_ordered (&sleep_list, &(curr->elem), cmp_more_less, NULL);
-	thread_block();
-	intr_set_level (old_level);
-}
-
-void
-thread_awake(int64_t ticks)
-{
-	struct list_elem *iter = list_begin(&sleep_list);
-	while (iter != list_end(&sleep_list))
-	{
-		struct thread *curr = list_entry(iter, struct thread, elem);
-		if(curr->wake_tick <= ticks)
-		{
-			iter = list_remove(iter);
-			thread_unblock(curr);
-		}
-		else
-			break;
-	}
-}
-
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
@@ -675,13 +642,4 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
-}
-
-
-static bool cmp_more_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED)
-{
-	struct thread *t1 =  list_entry (a, struct thread, elem);
-	struct thread *t2 =  list_entry (b, struct thread, elem);
-
-	return(t1->wake_tick < t2->wake_tick);
 }
