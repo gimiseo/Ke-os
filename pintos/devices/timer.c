@@ -92,9 +92,12 @@ void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
+	//인터럽트 걸고 들어오는거니까 있어야지...
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	//사악한 코드는 당장 없어져야...!
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+	thread_sleep(start + ticks);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -122,10 +125,14 @@ timer_print_stats (void) {
 }
 
 /* Timer interrupt handler. */
+/*동석코치님 왈: 하드웨어 타이머가 계속 확인해준다.*/
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	//사실상 이친구가 스케줄러
 	thread_tick ();
+	/*project1-1 wait 함수 추가*/
+	thread_awake(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

@@ -87,10 +87,11 @@ typedef int tid_t;
  * blocked state is on a semaphore wait list. */
 struct thread {
 	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	tid_t		tid;                          /* Thread identifier. */
+	enum		thread_status status;          /* Thread state. */
+	char		name[16];                      /* Name (for debugging purposes). */
+	int			priority;                       /* Priority. */
+	int64_t		wake_tick;					/* 이때 깨워주쇼 */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -132,7 +133,9 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
-
+//project_1 thread_sleep추가
+void thread_sleep(int64_t ticks);
+void thread_awake(int64_t ticks);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

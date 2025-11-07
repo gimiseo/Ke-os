@@ -103,6 +103,7 @@ struct list {
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
+//이거 유용함 복귀 메크로
 
 void list_init (struct list *);
 

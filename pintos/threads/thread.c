@@ -28,6 +28,11 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/*project1-1 Alarm Clock*/
+/*지금까지는 대기줄에서만 돌았다! scheduler 눈에 안 거슬리게 여기다 처 박아놓자;;*/
+static struct list sleep_list;
+/*init하는거 까먹지말고 이거 내가 만든거 아니다. */
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -62,6 +67,8 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+
+static bool cmp_more_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -107,7 +114,10 @@ thread_init (void) {
 
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
+	/*project1-1*/
 	list_init (&ready_list);
+    /*이제 잘수있다.*/
+    list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -306,6 +316,38 @@ thread_yield (void) {
 		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+
+
+//thread_sleep 추가
+void 
+thread_sleep(int64_t ticks)
+{
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	struct thread *curr = thread_current();
+	ASSERT(curr != idle_thread);
+	thread_block();
+	list_insert_ordered (&sleep_list, &(curr->elem), cmp_more_less, NULL);
+	intr_set_level (old_level);
+}
+
+void
+thread_awake(int64_t ticks)
+{
+	struct list_elem *iter = list_begin(&sleep_list);
+	while (iter != list_end(&sleep_list))
+	{
+		struct thread *curr = list_entry(iter, struct thread, elem);
+		if(curr->wake_tick <= ticks)
+		{
+			iter = list_remove(iter);
+			thread_unblock(curr);
+		}
+		else
+			break;
+	}
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -587,4 +629,13 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+
+static bool cmp_more_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *t1 =  list_entry (a, struct thread, elem);
+	struct thread *t2 =  list_entry (b, struct thread, elem);
+
+	return(t1->wake_tick < t2->wake_tick);
 }
