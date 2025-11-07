@@ -328,8 +328,9 @@ thread_sleep(int64_t ticks)
 
 	struct thread *curr = thread_current();
 	ASSERT(curr != idle_thread);
-	thread_block();
+	curr->wake_tick = ticks;
 	list_insert_ordered (&sleep_list, &(curr->elem), cmp_more_less, NULL);
+	thread_block();
 	intr_set_level (old_level);
 }
 
