@@ -261,6 +261,8 @@ void thread_sleep (int64_t tick) {
     ASSERT (!intr_context ());
 
     old_level = intr_disable ();
+    
+    ASSERT (thread_current () != idle_thread);
     thread_current ()->awake = tick;
     list_insert_ordered(&sleep_list, &thread_current ()->elem, cmp_awake_less, NULL);
     thread_block ();
