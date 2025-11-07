@@ -256,12 +256,15 @@ thread_unblock (struct thread *t) {
 /* thread의 awake를 설정 후 sleep_list에 넣고 block
    sleep_list는 tick을 기준으로 정렬되어야 한다. */
 void thread_sleep (int64_t tick) {
-    ASSERT (!intr_context ());
-	ASSERT (intr_get_level () == INTR_OFF);
+    enum intr_level old_level;
 
+    ASSERT (!intr_context ());
+
+    old_level = intr_disable ();
     thread_current ()->awake = tick;
     list_insert_ordered(&sleep_list, &thread_current ()->elem, cmp_awake_less, NULL);
     thread_block ();
+    intr_set_level(old_level);
 }
 
 /* awake 비교 함수 */
