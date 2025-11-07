@@ -277,11 +277,11 @@ bool cmp_awake_less (const struct list_elem *a,
    sleep_list를 앞에서부터 순회하며 충분히 잤으면 깨운다. */
 void thread_awake (int64_t ticks) {
     struct list_elem *iter = list_begin (&sleep_list);
-    while (iter != NULL) {
+    while (iter != list_end (&sleep_list)) {
         struct thread *curr = list_entry (iter, struct thread, elem);
         if (curr->awake <= ticks) {
+            iter = list_remove (iter);
             thread_unblock (curr);
-            iter = list_next (iter);
         } else {
             break;
         }
