@@ -96,8 +96,8 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 
     /* Project 1 - Alarm Clock */
-    int64_t awake;
-    /* ~Project 1 */
+    int64_t wake_time;
+    /* ~Alarm Clock */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -132,11 +132,8 @@ void thread_unblock (struct thread *);
 
 /* Project 1 - Alarm Clock */
 void thread_sleep (int64_t tick);
-bool cmp_awake_less (const struct list_elem *a,
-                     const struct list_elem *b,
-                     void *aux UNUSED);
 void thread_awake (int64_t ticks);
-/* ~Project 1 */
+/* ~Alarm Clock */
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

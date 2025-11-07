@@ -28,9 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-/* Project 1 - Alarm clock */
+/* Project 1 - Alarm Clock */
 static struct list sleep_list;
-/* ~Project 1 */
+/* ~Alarm Clock 1 */
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -66,6 +66,12 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+
+/* Project 1 - Alarm Clock */
+static bool cmp_awake_less (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED);
+/* ~Alarm Clock */
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -112,9 +118,9 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
-    /* Project 1 - Alarm clock */
+    /* Project 1 - Alarm Clock */
     list_init (&sleep_list);
-    /* ~Project 1 */
+    /* ~Alarm Clock 1 */
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -263,19 +269,19 @@ void thread_sleep (int64_t tick) {
     old_level = intr_disable ();
     
     ASSERT (thread_current () != idle_thread);
-    thread_current ()->awake = tick;
+    thread_current ()->wake_time = tick;
     list_insert_ordered(&sleep_list, &thread_current ()->elem, cmp_awake_less, NULL);
     thread_block ();
     intr_set_level(old_level);
 }
 
 /* awake 비교 함수 */
-bool cmp_awake_less (const struct list_elem *a,
+static bool cmp_awake_less (const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux UNUSED) {
     struct thread *ta = list_entry (a, struct thread, elem);
     struct thread *tb = list_entry (b, struct thread, elem);
-    return ta->awake < tb->awake;
+    return ta->wake_time < tb->wake_time;
 }
 
 /* timer.c 의 timer_interrupt에 의해 매틱마다 실행
@@ -284,7 +290,7 @@ void thread_awake (int64_t ticks) {
     struct list_elem *iter = list_begin (&sleep_list);
     while (iter != list_end (&sleep_list)) {
         struct thread *curr = list_entry (iter, struct thread, elem);
-        if (curr->awake <= ticks) {
+        if (curr->wake_time <= ticks) {
             iter = list_remove (iter);
             thread_unblock (curr);
         } else {
@@ -292,7 +298,7 @@ void thread_awake (int64_t ticks) {
         }
     }
 }
-/* ~Project 1 */
+/* ~Alarm Clock */
 
 /* Returns the name of the running thread. */
 const char *
