@@ -28,6 +28,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* Project 1 - Alarm clock */
+static struct list sleep_list;
+/* ~Project 1 */
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +112,9 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+    /* Project 1 - Alarm clock */
+    list_init (&sleep_list);
+    /* ~Project 1 */
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -244,6 +251,43 @@ thread_unblock (struct thread *t) {
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
+
+/* Project 1 - Alarm Clock */
+/* thread의 awake를 설정 후 sleep_list에 넣고 block
+   sleep_list는 tick을 기준으로 정렬되어야 한다. */
+void thread_sleep (int64_t tick) {
+    ASSERT (!intr_context ());
+	ASSERT (intr_get_level () == INTR_OFF);
+
+    thread_current ()->awake = tick;
+    list_insert_ordered(&sleep_list, &thread_current ()->elem, cmp_awake_less, NULL);
+    thread_block ();
+}
+
+/* awake 비교 함수 */
+bool cmp_awake_less (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED) {
+    struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+    return ta->awake < tb->awake;
+}
+
+/* timer.c 의 timer_interrupt에 의해 매틱마다 실행
+   sleep_list를 앞에서부터 순회하며 충분히 잤으면 깨운다. */
+void thread_awake (int64_t ticks) {
+    struct list_elem *iter = list_begin (&sleep_list);
+    while (iter != NULL) {
+        struct thread *curr = list_entry (iter, struct thread, elem);
+        if (curr->awake <= ticks) {
+            thread_unblock (curr);
+            iter = list_next (iter);
+        } else {
+            break;
+        }
+    }
+}
+/* ~Project 1 */
 
 /* Returns the name of the running thread. */
 const char *
