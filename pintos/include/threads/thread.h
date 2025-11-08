@@ -90,7 +90,13 @@ struct thread {
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+
+    /* Project 1 - Priority Scheduling */
+	int base_priority;                  /* Priority Before Donation */
+    int final_priority;                 /* Priority After Donation */
+    struct lock *waiting_lock;          /* Lock info for currently waiting */
+    struct list holding_locks;          /* Locks info for currently holding */
+    /* ~Priority Scheduling */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -144,6 +150,9 @@ void thread_yield (void);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+/* Project 1 - Priority Scheduling */
+void thread_refresh_priority (struct thread *t);
+/* ~Priority Scheduling */
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -151,5 +160,13 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+/* Project 1 - Priority Scheduling */
+bool thread_priority_less (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED);
+bool thread_priority_more (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED);
+/* ~Priority Scheduling */
 
 #endif /* threads/thread.h */

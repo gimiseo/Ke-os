@@ -69,8 +69,8 @@ static tid_t allocate_tid (void);
 
 /* Project 1 - Alarm Clock */
 static bool cmp_awake_less (const struct list_elem *a,
-                     const struct list_elem *b,
-                     void *aux UNUSED);
+                            const struct list_elem *b,
+                            void *aux UNUSED);
 /* ~Alarm Clock */
 
 /* Returns true if T appears to point to a valid thread. */
@@ -219,6 +219,12 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+    /* Project 1 - Priority Scheduling */
+    struct thread *curr = thread_current ();
+    if (curr->final_priority < t->final_priority) {
+        thread_yield ();
+    }
+    /* ~Priority Scheduling */
 
 	return tid;
 }
@@ -255,6 +261,14 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
+    /* Project 1 - Priority Scheduling */
+    struct thread *curr = thread_current ();
+    if (intr_context ()) {
+        if (curr->final_priority < t->final_priority) {
+            intr_yield_on_return ();
+        }
+    }
+    /* ~Priority Scheduling */
 	intr_set_level (old_level);
 }
 
@@ -364,16 +378,39 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* Project 1 - Priority Scheduling */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+    struct thread *curr = thread_current ();
+    enum intr_level old_level;
+
+    ASSERT (!intr_context ());
+
+    old_level = intr_disable ();
+	curr->base_priority = new_priority;
+    thread_refresh_priority (curr);
+    intr_set_level (old_level);
+
+    thread_yield ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+    struct thread *curr = thread_current ();
+    enum intr_level old_level;
+
+    old_level = intr_disable ();
+    thread_refresh_priority (curr);
+    intr_set_level (old_level);
+	return curr->final_priority;
 }
+
+/* Refresh the given thread's priority. */
+void thread_refresh_priority (struct thread *t) {
+    t->final_priority = t->base_priority;
+}
+/* ~Priority Scheduling */
 
 /* Sets the current thread's nice value to NICE. */
 void
@@ -462,7 +499,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
-	t->priority = priority;
+    /* Project 1 - Priority Scheduling */
+	t->base_priority = priority;
+    t->final_priority = priority;
+    /* ~Priority Scheduling */
 	t->magic = THREAD_MAGIC;
 }
 
@@ -471,13 +511,18 @@ init_thread (struct thread *t, const char *name, int priority) {
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
+/* Project 1 - Priority Scheduling */
 static struct thread *
 next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
-	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+	else {
+        struct list_elem *vip = list_max(&ready_list, thread_priority_less, NULL);
+        list_remove(vip);
+        return list_entry (vip, struct thread, elem);
+    }
 }
+/* ~Priority Scheduling */
 
 /* Use iretq to launch the thread */
 void
@@ -643,3 +688,21 @@ allocate_tid (void) {
 
 	return tid;
 }
+
+/* Project 1 - Priority Scheduling */
+bool thread_priority_less (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED) {
+    struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+    return ta->final_priority < tb->final_priority;
+}
+
+bool thread_priority_more (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED) {
+    struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+    return ta->final_priority > tb->final_priority;
+}
+/* ~Priority Scheduling */
