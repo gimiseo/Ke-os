@@ -20,6 +20,7 @@ enum thread_status {
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
+/** 스레드 생성 시 +1 */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
@@ -91,6 +92,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int64_t awake;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -143,4 +145,6 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
+bool cmp_awake_less(const struct list_elem *a, 
+	const struct list_elem *b, void *aux UNUSED);
 #endif /* threads/thread.h */

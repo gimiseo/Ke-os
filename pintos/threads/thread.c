@@ -27,6 +27,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+static struct list sleep_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -108,6 +109,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -166,7 +168,7 @@ thread_print_stats (void) {
    and adds it to the ready queue.  Returns the thread identifier
    for the new thread, or TID_ERROR if creation fails.
 
-   If thread_start() has been called, then the new thread may be
+   If thread_start() has been called, then the new thread may beb
    scheduled before thread_create() returns.  It could even exit
    before thread_create() returns.  Contrariwise, the original
    thread may run for any amount of time before the new thread is
@@ -308,6 +310,57 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
+bool cmp_awake_less(const struct list_elem *a, 
+	const struct list_elem *b, void *aux UNUSED){
+
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
+	return ta->awake < tb->awake;
+}
+
+/* alarm_clock */
+void
+thread_sleep(int64_t ticks) {
+	/**
+	 * 인터럽트 상태 백업
+	 * 인터럽트 막고
+	 * 현재 스레드 받아오고
+	 * assert -> != 유휴
+	 * 
+	 * 인터럽트 풀고
+	 */
+	struct thread *curr = thread_current();
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+    ASSERT(curr != idle_thread);
+
+	curr->awake = ticks;
+
+	list_insert_ordered(&sleep_list, &curr->elem, cmp_awake_less, NULL);
+	thread_block();
+
+	intr_set_level (old_level);
+}
+
+
+void thread_awake(int64_t tick){
+	struct list_elem *curr = list_begin(&sleep_list);
+	struct thread *cur = list_entry(curr, struct thread, elem);
+
+	while(curr != list_end(&sleep_list)){
+		struct list_elem *curr = list_begin(&sleep_list);
+		struct thread *tt = list_entry(curr, struct thread, elem);
+		if(tt->awake <= tick){
+			curr = list_remove(curr);
+			thread_unblock(tt);
+		}else break;
+	}
+
+
+
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
@@ -373,7 +426,7 @@ idle (void *idle_started_ UNUSED) {
 		   The `sti' instruction disables interrupts until the
 		   completion of the next instruction, so these two
 		   instructions are executed atomically.  This atomicity is
-		   important; otherwise, an interrupt could be handled
+		   important; otherwise, an interrupt could be handled₩
 		   between re-enabling interrupts and waiting for the next
 		   one to occur, wasting as much as one clock tick worth of
 		   time.
@@ -417,7 +470,7 @@ init_thread (struct thread *t, const char *name, int priority) {
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread *
-next_thread_to_run (void) {
+next_thread_to_run (void) { 
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
