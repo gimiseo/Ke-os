@@ -32,9 +32,11 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+/* Project 1 - Priority Scheduling */
 static bool sema_value_less (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux UNUSED);
+/* ~Priority Scheduling */
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -320,12 +322,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
+    /* Project 1 - Priority Scheduling */
 	if (!list_empty (&cond->waiters)) {
         struct list_elem *vip = list_max (&cond->waiters, sema_value_less, NULL);
         list_remove (vip);
         sema_up (&list_entry (vip, struct semaphore_elem, elem)->semaphore);
     }
-		
+    /* ~Priority Scheduling */
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -343,6 +346,7 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 		cond_signal (cond, lock);
 }
 
+/* Project 1 - Priority Scheduling */
 static bool sema_value_less (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux UNUSED) {
@@ -357,3 +361,4 @@ static bool sema_value_less (const struct list_elem *a,
 
     return ta->final_priority < tb->final_priority;
 }
+/* ~Priority Scheduling */
