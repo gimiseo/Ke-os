@@ -27,6 +27,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define MAX_DONATE_DEPTH 8              /* Max depth in priority donation */
 
 /* A kernel thread or user process.
  *
@@ -95,7 +96,8 @@ struct thread {
 	int base_priority;                  /* Priority Before Donation */
     int final_priority;                 /* Priority After Donation */
     struct lock *waiting_lock;          /* Lock info for currently waiting */
-    struct list holding_locks;          /* Locks info for currently holding */
+    struct list donation_list;        /* Waiting threads by holding locks */
+    struct list_elem donation_elem;      /* Used by waiting_threads */
     /* ~Priority Scheduling */
 
 	/* Shared between thread.c and synch.c. */
@@ -151,7 +153,7 @@ void thread_yield (void);
 int thread_get_priority (void);
 void thread_set_priority (int);
 /* Project 1 - Priority Scheduling */
-void thread_refresh_priority (struct thread *t);
+void thread_refresh_priority (struct thread *t, int depth);
 /* ~Priority Scheduling */
 
 int thread_get_nice (void);

@@ -388,7 +388,7 @@ thread_set_priority (int new_priority) {
 
     old_level = intr_disable ();
 	curr->base_priority = new_priority;
-    thread_refresh_priority (curr);
+    thread_refresh_priority (curr, 0);
     intr_set_level (old_level);
 
     thread_yield ();
@@ -398,17 +398,30 @@ thread_set_priority (int new_priority) {
 int
 thread_get_priority (void) {
     struct thread *curr = thread_current ();
-    enum intr_level old_level;
-
-    old_level = intr_disable ();
-    thread_refresh_priority (curr);
-    intr_set_level (old_level);
 	return curr->final_priority;
 }
 
 /* Refresh the given thread's priority. */
-void thread_refresh_priority (struct thread *t) {
+void thread_refresh_priority (struct thread *t, int depth) {
+    int prev_priority;
+    struct list_elem *iter;
+    struct thread *waiter;
+
+    ASSERT (intr_get_level () == INTR_OFF);
+    
+    prev_priority = t->final_priority;
     t->final_priority = t->base_priority;
+    for (iter = list_begin (&t->donation_list);
+         iter != list_end (&t->donation_list);
+         iter = list_next (iter)) {
+        waiter = list_entry (iter, struct thread, donation_elem);
+        if (t->final_priority < waiter->final_priority) {
+            t->final_priority = waiter->final_priority;
+        }
+    }
+    if (depth < MAX_DONATE_DEPTH && (prev_priority != t->final_priority) && (t->waiting_lock != NULL)) {
+        thread_refresh_priority (t->waiting_lock->holder, depth + 1);
+    }
 }
 /* ~Priority Scheduling */
 
@@ -502,6 +515,8 @@ init_thread (struct thread *t, const char *name, int priority) {
     /* Project 1 - Priority Scheduling */
 	t->base_priority = priority;
     t->final_priority = priority;
+    t->waiting_lock = NULL;
+    list_init (&t->donation_list);
     /* ~Priority Scheduling */
 	t->magic = THREAD_MAGIC;
 }
