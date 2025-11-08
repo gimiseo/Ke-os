@@ -164,9 +164,6 @@ void do_iret (struct intr_frame *tf);
 bool thread_priority_less (const struct list_elem *a,
                            const struct list_elem *b,
                            void *aux UNUSED);
-bool thread_priority_more (const struct list_elem *a,
-                           const struct list_elem *b,
-                           void *aux UNUSED);
 /* ~Priority Scheduling */
 
 #endif /* threads/thread.h */

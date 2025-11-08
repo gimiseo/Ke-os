@@ -32,6 +32,10 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static bool sema_value_less (const struct list_elem *a,
+                             const struct list_elem *b,
+                             void *aux UNUSED);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -316,9 +320,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty (&cond->waiters)) {
+        struct list_elem *vip = list_max (&cond->waiters, sema_value_less, NULL);
+        list_remove (vip);
+        sema_up (&list_entry (vip, struct semaphore_elem, elem)->semaphore);
+    }
+		
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -334,4 +341,19 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+static bool sema_value_less (const struct list_elem *a,
+                             const struct list_elem *b,
+                             void *aux UNUSED) {
+    struct semaphore_elem *sa_elem = list_entry (a, struct semaphore_elem, elem);
+    struct semaphore_elem *sb_elem = list_entry (b, struct semaphore_elem, elem);
+
+    struct list_elem *wa = list_begin (&sa_elem->semaphore.waiters);
+    struct list_elem *wb = list_begin (&sb_elem->semaphore.waiters);
+
+    struct thread *ta = list_entry (wa, struct thread, elem);
+    struct thread *tb = list_entry (wb, struct thread, elem);
+
+    return ta->final_priority < tb->final_priority;
 }

@@ -698,11 +698,4 @@ bool thread_priority_less (const struct list_elem *a,
     return ta->final_priority < tb->final_priority;
 }
 
-bool thread_priority_more (const struct list_elem *a,
-                           const struct list_elem *b,
-                           void *aux UNUSED) {
-    struct thread *ta = list_entry (a, struct thread, elem);
-    struct thread *tb = list_entry (b, struct thread, elem);
-    return ta->final_priority > tb->final_priority;
-}
 /* ~Priority Scheduling */
