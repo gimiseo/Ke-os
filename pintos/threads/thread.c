@@ -73,6 +73,12 @@ static bool cmp_awake_less (const struct list_elem *a,
                      void *aux UNUSED);
 /* ~Alarm Clock */
 
+/* Project 1 - priority_cmp */
+static bool cmp_priority_more (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED);
+/* ~Alarm Clock */
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -219,7 +225,6 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-
 	return tid;
 }
 
@@ -253,10 +258,19 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	// project1-2-> 뒤에다 넣지말고 잘 넣기
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority_more, NULL);
 	t->status = THREAD_READY;
+	if (!intr_context () && !list_empty(&ready_list)) {
+        struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
+        if (thread_current ()->priority < ready_front->priority) {
+            thread_yield();
+        }
+    }
 	intr_set_level (old_level);
 }
+
 
 /* Project 1 - Alarm Clock */
 /* thread의 awake를 설정 후 sleep_list에 넣고 block
@@ -282,6 +296,14 @@ static bool cmp_awake_less (const struct list_elem *a,
     struct thread *ta = list_entry (a, struct thread, elem);
     struct thread *tb = list_entry (b, struct thread, elem);
     return ta->wake_time < tb->wake_time;
+}
+/*우선순위 비교 함수*/
+static bool cmp_priority_more (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED){
+	struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+	return ta->priority > tb->priority;
 }
 
 /* timer.c 의 timer_interrupt에 의해 매틱마다 실행
@@ -357,16 +379,28 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+	//project 1-2 우선순위 순으로 넣기
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority_more, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* project 1-2 priority 현재스레드priority보다 new priority가 낮아지면*/
+/*고치기 보류. donation을 고려한 함수짜기*/
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	enum intr_level old_level;
+	old_level = intr_disable ();
+	thread_current ()->base_priority = new_priority;
+	if (!list_empty(&ready_list))
+	{
+		struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
+		if (thread_current ()->priority < ready_front->priority)
+			thread_yield();
+	}
+	intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */

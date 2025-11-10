@@ -32,6 +32,16 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+
+/*우선순위 비교 용병 함수*/
+static bool cmp_priority_more (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED){
+	struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+	return ta->priority > tb->priority;
+}
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -66,7 +76,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		//project 1-2 우선순위 순으로 넣기
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, cmp_priority_more, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -282,7 +293,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	// project1-2-> 뒤에다 넣지말고 잘 넣기
+	list_insert_ordered(&cond->waiters, &waiter.elem, cmp_priority_more, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);

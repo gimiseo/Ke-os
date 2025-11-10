@@ -91,6 +91,10 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int base_priority;					/*Project 2 - 기존 우선순위 추가*/
+	struct lock *waiting_lock;			/*내가 기다리는 락*/
+	struct list donations;				/*나에게 기부한 스레드 목록/
+	struct list_elem d_elem;			/*donation 리스트용*/
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
