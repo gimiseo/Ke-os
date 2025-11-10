@@ -225,6 +225,15 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	enum intr_level old_level;
+	old_level = intr_disable ();
+	if (thread_current() != idle_thread && !list_empty(&ready_list))
+	{
+		struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
+		if (thread_current ()->priority < ready_front->priority)
+			thread_yield();
+	}
+	intr_set_level (old_level);
 	return tid;
 }
 
@@ -262,12 +271,6 @@ thread_unblock (struct thread *t) {
 	// project1-2-> 뒤에다 넣지말고 잘 넣기
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority_more, NULL);
 	t->status = THREAD_READY;
-	if (!intr_context () && !list_empty(&ready_list)) {
-        struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
-        if (thread_current ()->priority < ready_front->priority) {
-            thread_yield();
-        }
-    }
 	intr_set_level (old_level);
 }
 
@@ -277,9 +280,6 @@ thread_unblock (struct thread *t) {
    sleep_list는 tick을 기준으로 정렬되어야 한다. */
 void thread_sleep (int64_t tick) {
     enum intr_level old_level;
-
-    ASSERT (!intr_context ());
-
     old_level = intr_disable ();
     
     ASSERT (thread_current () != idle_thread);
@@ -309,16 +309,25 @@ static bool cmp_priority_more (const struct list_elem *a,
 /* timer.c 의 timer_interrupt에 의해 매틱마다 실행
    sleep_list를 앞에서부터 순회하며 충분히 잤으면 깨운다. */
 void thread_awake (int64_t ticks) {
+	enum intr_level old_level;
+    old_level = intr_disable ();
     struct list_elem *iter = list_begin (&sleep_list);
     while (iter != list_end (&sleep_list)) {
         struct thread *curr = list_entry (iter, struct thread, elem);
         if (curr->wake_time <= ticks) {
             iter = list_remove (iter);
             thread_unblock (curr);
+			if (thread_current() != idle_thread && !list_empty(&ready_list))
+			{
+				struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
+				if (thread_current ()->priority < ready_front->priority)
+					thread_yield();
+			}
         } else {
             break;
         }
     }
+	intr_set_level(old_level);
 }
 /* ~Alarm Clock */
 
@@ -393,8 +402,8 @@ void
 thread_set_priority (int new_priority) {
 	enum intr_level old_level;
 	old_level = intr_disable ();
-	thread_current ()->base_priority = new_priority;
-	if (!list_empty(&ready_list))
+	thread_current ()->priority = new_priority;
+	if (thread_current() != idle_thread && !list_empty(&ready_list))
 	{
 		struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
 		if (thread_current ()->priority < ready_front->priority)
