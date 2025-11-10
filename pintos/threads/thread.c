@@ -225,15 +225,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	enum intr_level old_level;
-	old_level = intr_disable ();
-	if (thread_current() != idle_thread && !list_empty(&ready_list))
-	{
-		struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
-		if (thread_current ()->priority < ready_front->priority)
-			thread_yield();
-	}
-	intr_set_level (old_level);
+	thread_preempted();
 	return tid;
 }
 
@@ -274,6 +266,18 @@ thread_unblock (struct thread *t) {
 	intr_set_level (old_level);
 }
 
+void 
+thread_preempted (void)
+{
+	if (thread_current() == idle_thread)
+		return;
+	if (list_empty(&ready_list))
+		return;
+	struct thread *curr = thread_current ();
+	struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
+	if (curr->priority < ready_front->priority)
+		thread_yield();
+}
 
 /* Project 1 - Alarm Clock */
 /* thread의 awake를 설정 후 sleep_list에 넣고 block
@@ -317,12 +321,7 @@ void thread_awake (int64_t ticks) {
         if (curr->wake_time <= ticks) {
             iter = list_remove (iter);
             thread_unblock (curr);
-			if (thread_current() != idle_thread && !list_empty(&ready_list))
-			{
-				struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
-				if (thread_current ()->priority < ready_front->priority)
-					thread_yield();
-			}
+			thread_preempted();
         } else {
             break;
         }
@@ -400,16 +399,8 @@ thread_yield (void) {
 /*고치기 보류. donation을 고려한 함수짜기*/
 void
 thread_set_priority (int new_priority) {
-	enum intr_level old_level;
-	old_level = intr_disable ();
 	thread_current ()->priority = new_priority;
-	if (thread_current() != idle_thread && !list_empty(&ready_list))
-	{
-		struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
-		if (thread_current ()->priority < ready_front->priority)
-			thread_yield();
-	}
-	intr_set_level (old_level);
+	thread_preempted();
 }
 
 /* Returns the current thread's priority. */
