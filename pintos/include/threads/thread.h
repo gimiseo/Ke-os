@@ -28,6 +28,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 #define MAX_DONATE_DEPTH 8              /* Max depth in priority donation */
+#define NICE_DEFAULT 0                  /* Defulat nicd */
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
 
 /* A kernel thread or user process.
  *
@@ -106,6 +109,10 @@ struct thread {
     /* Project 1 - Alarm Clock */
     int64_t wake_time;
     /* ~Alarm Clock */
+    /* Project 1 - Advanced Scheduler */
+    int nice;
+    int recent_cpu;                     /* 17.14 fp */
+    /* ~Advanced Scheduler */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -160,6 +167,15 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Project 1 - Advanced Scheduler */
+void cal_priority (struct thread *t);
+void cal_recent_cpu (struct thread *t);
+void cal_load_avg (void);
+void update_priority (void);
+void incr_recent_cpu (void);
+void update_recent_cpu (void);
+/* ~Advanced Scheduler */
 
 void do_iret (struct intr_frame *tf);
 /* Project 1 - Priority Scheduling */
