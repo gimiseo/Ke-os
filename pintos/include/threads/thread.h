@@ -27,6 +27,12 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+/*project 1-4 advanced*/
+#define NICE_MAX 20
+#define NICE_DEFAULT 0
+#define NICE_MIN -20
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
 
 /* A kernel thread or user process.
  *
@@ -104,6 +110,10 @@ struct thread {
 	struct list donation;				/*priority 기부 리스트 - 기부받기 전으로 되돌리기 용*/
 	struct list_elem donation_elem;		/*이 스레드가 기부하면 들어가는 요소*/
 
+	/*project 1-4 - advenced*/
+	int nice;
+	int recent_cpu;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -158,6 +168,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/*project 1 -> Advanced scheduler*/
+void cal_priority (struct thread *t);
+void cal_recent_cpu (struct thread *t);
+void cal_load_avg (void);
+void update_priority (void);
+void incr_recent_cpu (void);
+void update_recent_cpu (void);
 
 void do_iret (struct intr_frame *tf);
 

@@ -121,12 +121,26 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	//project 1-4 advanced
+	if (thread_mlfqs)
+	{
+		incr_recent_cpu();
+		if (ticks % 4 == 0)
+		{
+			update_priority ();
+		}
+		if (ticks % TIMER_FREQ == 0)
+		{
+			cal_load_avg ();
+			update_recent_cpu ();
+		}
+	}
     thread_awake (ticks);
 }
 
