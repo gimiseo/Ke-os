@@ -391,7 +391,7 @@ thread_set_priority (int new_priority) {
     ASSERT (!intr_context ());
 
     old_level = intr_disable ();
-	curr->base_priority = new_priority;
+    curr->base_priority = new_priority;
     thread_refresh_priority (curr, 0);
     intr_set_level (old_level);
 

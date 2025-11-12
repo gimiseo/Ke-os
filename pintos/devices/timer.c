@@ -135,8 +135,8 @@ timer_interrupt (struct intr_frame *args UNUSED) {
             update_priority ();
         }
         if (ticks % TIMER_FREQ == 0) {
-            update_recent_cpu ();
             cal_load_avg ();
+            update_recent_cpu ();
         }
     }
     /* ~Advanced Scheduler */

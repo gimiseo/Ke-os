@@ -99,8 +99,8 @@ struct thread {
 	int base_priority;                  /* Priority Before Donation */
     int final_priority;                 /* Priority After Donation */
     struct lock *waiting_lock;          /* Lock info for currently waiting */
-    struct list donation_list;        /* Waiting threads by holding locks */
-    struct list_elem donation_elem;      /* Used by waiting_threads */
+    struct list donation_list;          /* Waiting threads by holding locks */
+    struct list_elem donation_elem;     /* Used by waiting_threads */
     /* ~Priority Scheduling */
 
 	/* Shared between thread.c and synch.c. */
