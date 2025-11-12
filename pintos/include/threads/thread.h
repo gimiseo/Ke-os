@@ -97,7 +97,12 @@ struct thread {
 
     /* Project 1 - Alarm Clock */
     int64_t wake_time;
-    /* ~Alarm Clock */
+
+	/* Project 1-3 - donation */
+    int actual_priority; 				/*donation 종료시 기존 priority로 돌아오기용*/
+	struct lock *lock_on_wait;			/*스레드가 요청했지만 다른 스레드가 점유하고 있어서 기다리는 lock*/
+	struct list donation;				/*priority 기부 리스트 - 기부받기 전으로 되돌리기 용*/
+	struct list_elem donation_elem;		/*이 스레드가 기부하면 들어가는 요소*/
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

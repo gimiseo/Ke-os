@@ -24,9 +24,12 @@ struct lock {
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
+void donation_priority (void);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
+void retrieve_priority (void);
 bool lock_held_by_current_thread (const struct lock *);
+
 
 /* Condition variable. */
 struct condition {

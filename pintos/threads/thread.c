@@ -399,7 +399,8 @@ thread_yield (void) {
 /*고치기 보류. donation을 고려한 함수짜기*/
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	thread_current ()->actual_priority = new_priority;
+	retrieve_priority ();
 	thread_preempted();
 }
 
@@ -498,6 +499,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	//project 1-3 donation
+	t->actual_priority = priority;
+	t->lock_on_wait = NULL;
+	list_init(&(t->donation));
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
