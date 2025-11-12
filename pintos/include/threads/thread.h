@@ -27,6 +27,12 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+/*project 1-4 advanced*/
+#define NICE_MAX 20
+#define NICE_DEFAULT 0
+#define NICE_MIN -20
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
 
 /* A kernel thread or user process.
  *
@@ -97,7 +103,16 @@ struct thread {
 
     /* Project 1 - Alarm Clock */
     int64_t wake_time;
-    /* ~Alarm Clock */
+
+	/* Project 1-3 - donation */
+    int actual_priority; 				/*donation 종료시 기존 priority로 돌아오기용*/
+	struct lock *lock_on_wait;			/*스레드가 요청했지만 다른 스레드가 점유하고 있어서 기다리는 lock*/
+	struct list donation;				/*priority 기부 리스트 - 기부받기 전으로 되돌리기 용*/
+	struct list_elem donation_elem;		/*이 스레드가 기부하면 들어가는 요소*/
+
+	/*project 1-4 - advenced*/
+	int nice;
+	int recent_cpu;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -130,6 +145,10 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
+/*project 1-2 선점함수*/
+void 
+thread_preempted (void);
+
 /* Project 1 - Alarm Clock */
 void thread_sleep (int64_t tick);
 void thread_awake (int64_t ticks);
@@ -149,6 +168,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/*project 1 -> Advanced scheduler*/
+void cal_priority (struct thread *t);
+void cal_recent_cpu (struct thread *t);
+void cal_load_avg (void);
+void update_priority (void);
+void incr_recent_cpu (void);
+void update_recent_cpu (void);
 
 void do_iret (struct intr_frame *tf);
 
