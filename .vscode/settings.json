@@ -1,7 +1,11 @@
 {
     "files.associations": {
-        "list.h": "c",
-        "tests.h": "c",
-        "thread.h": "c"
+        "init.h": "c",
+        "syscall.h": "c",
+        "loader.h": "c",
+        "stddef.h": "c",
+        "intrinsic.h": "c",
+        "*.inc": "c",
+        "lib.h": "c"
     }
 }

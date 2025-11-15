@@ -204,6 +204,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	for (int i = 0; i < 1000000000; i++);
 	return -1;
 }
 
@@ -215,7 +216,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 	process_cleanup ();
 }
 
@@ -328,6 +329,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	//신규 처리 파일명 이상해서 안들어간다능
+	char *save;
+	char file_name_cp[128];
+	strlcpy(file_name_cp, file_name, 128);
+	strtok_r(file_name, " ", &save);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -413,10 +419,59 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-
+	//단어개수 세기
+	int argc = 0;
+	int byte_size = 0;
+	int count = 0;
+	int in_word = 0;
+	while (file_name_cp[count] != '\0')
+	{
+		if (file_name_cp[count] != ' ')
+		{
+			if (in_word == 0)
+			{
+				in_word = 1;
+				argc++;
+			}
+			byte_size++;
+		}
+		else
+		{
+			if (in_word != 0)
+				in_word = 0;
+		}
+		count++;
+	}
+	char *trash;
+	if_->rsp -= (byte_size + argc);
+	char *token;
+	char *curr = (char *)if_->rsp;
+	
+	token = strtok_r(file_name_cp, " ", &trash);
+	if ((byte_size + argc) % 8 != 0)
+		if_->rsp -= 8 - ((byte_size + argc) % 8);
+	memset((void *)if_->rsp, 0, 8 - ((byte_size + argc) % 8));
+	if_->rsp -= (argc + 2) * 8;
+	memset((void *)if_->rsp, 0, (argc + 2) * 8);
+	char **adress = (char **)if_->rsp;
+	for (count = 0; count < argc; count++)
+	{
+		strlcpy(curr, token, strlen(token) + 1);
+		adress++;
+		*adress = curr;
+		curr += strlen(token) + 1;
+		token = strtok_r(NULL, " ", &trash);
+	}
+	//Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
+	if_->R.rdi = argc;
+	if_->R.rsi = (uint64_t)(if_->rsp + 8);
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
+	// while(*save != NULL)
+	// {
+	// 	if (*save)
+	// }
+	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true); 
 	success = true;
 
 done:

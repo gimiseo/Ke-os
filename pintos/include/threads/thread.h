@@ -8,7 +8,9 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
+#ifndef USERPROG
+#define USERPROG
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -113,6 +115,8 @@ struct thread {
 	/*project 1-4 - advenced*/
 	int nice;
 	int recent_cpu;
+
+	int exit_num;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
