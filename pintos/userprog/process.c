@@ -338,7 +338,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	// file_name을 파싱하자
+	/* [hs] argument passing */
 	char *token, *saveptr;
 	int cnt_size = 0;
 
@@ -430,7 +430,8 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
+	 
+	/* [hs] argument passing */
 	if_->rsp -= cnt_size;
 	char *ptr_s = if_->rsp;
 	char *ptr_f = file_name; 
