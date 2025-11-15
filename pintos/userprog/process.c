@@ -330,6 +330,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	int argc = 0;
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -337,6 +338,15 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	// file_name을 파싱하자
+	char *token, *saveptr;
+	int cnt_size = 0;
+
+	for(token = strtok_r(file_name, " ", &saveptr); token != NULL;
+	token = strtok_r(NULL, " ", &saveptr)){
+		cnt_size += strlen(token) + 1;
+		argc++;
+	}
 
 
 	/* Open executable file. */
@@ -421,6 +431,41 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
+	if_->rsp -= cnt_size;
+	char *ptr_s = if_->rsp;
+	char *ptr_f = file_name; 
+	char *argv[32];
+	argv[0] = ptr_s; //시작 주소
+	int cnt = 1;
+
+	for(int i = 0; i < cnt_size; ++i){
+		*ptr_s = *ptr_f;
+		if(*ptr_f == '\0'){
+			argv[cnt++] = ptr_s;
+		}
+		ptr_s++;
+		ptr_f++;
+	}
+	
+	if(cnt_size % 8 != 0){
+		int up = (cnt_size + 7) & ~7;
+		int need = up - cnt_size;
+		if_->rsp -= need;
+		memset(if_->rsp, 0, need);
+	}
+
+	if_->rsp -= (argc+1) * 8;
+	char *s_ptr = if_->rsp;
+	for(int i = 0; i <= argc; ++i){
+		memcpy(s_ptr, &argv[i], 8);
+		s_ptr += 8;
+	}
+
+	if_->rsp -= 8;
+	uint64_t *fill = 0;
+	memcpy(if_->rsp, &fill, 8);
+	
+	hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
 	success = true;
 
 done:
