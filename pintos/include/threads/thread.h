@@ -8,9 +8,9 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-#ifndef USERPROG
-#define USERPROG
-#endif
+// #ifndef USERPROG
+// #define USERPROG
+// #endif
 
 /* States in a thread's life cycle. */
 enum thread_status {
