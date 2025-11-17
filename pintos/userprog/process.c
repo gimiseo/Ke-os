@@ -195,7 +195,7 @@ process_exec (void *f_name) {
  * exception), returns -1.  If TID is invalid or if it was not a
  * child of the calling process, or if process_wait() has already
  * been successfully called for the given TID, returns -1
- * immediately, without waiting.
+ * immediately, without waiting.	
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
@@ -204,10 +204,14 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while(1){
+	int tmp = 1000;
+	while(tmp != 0){
+		tmp--;
 		thread_yield();
 	}
-	return -1;
+	
+
+
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -427,9 +431,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	 
 	/* [hs] argument passing */
 	if_->rsp -= cnt_size;
@@ -439,15 +440,18 @@ load (const char *file_name, struct intr_frame *if_) {
 	argv[0] = ptr_s; //시작 주소
 	int cnt = 1;
 
+	// stack에 저장
 	for(int i = 0; i < cnt_size; ++i){
 		*ptr_s = *ptr_f;
 		if(*ptr_f == '\0'){
-			argv[cnt++] = ptr_s;
+			argv[cnt++] = ptr_s+1;
 		}
 		ptr_s++;
 		ptr_f++;
 	}
+
 	
+	// padding
 	if(cnt_size % 8 != 0){
 		int up = (cnt_size + 7) & ~7;
 		int need = up - cnt_size;
@@ -455,18 +459,24 @@ load (const char *file_name, struct intr_frame *if_) {
 		memset(if_->rsp, 0, need);
 	}
 
+	// argv[ ] stack에 저장
 	if_->rsp -= (argc+1) * 8;
 	char *s_ptr = if_->rsp;
-	for(int i = 0; i <= argc; ++i){
+	if_->R.rsi = if_->rsp;
+
+	for(int i = 0; i < argc; ++i){
 		memcpy(s_ptr, &argv[i], 8);
 		s_ptr += 8;
 	}
 
+	if_->R.rdi = argc;
+
+	// return address
 	if_->rsp -= 8;
 	uint64_t *fill = 0;
 	memcpy(if_->rsp, &fill, 8);
 	
-	hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
+	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
 	success = true;
 
 done:

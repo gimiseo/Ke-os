@@ -7,6 +7,8 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "lib/kernel/stdio.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -38,9 +40,44 @@ syscall_init (void) {
 }
 
 /* The main system call interface */
-void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+void syscall_handler (struct intr_frame *f UNUSED) {
+	uint64_t rax = f->R.rax;
+
+	switch(rax) {
+		case SYS_WRITE : 
+			int fd = f->R.rdi;
+			char *buf = f->R.rsi;
+			unsigned size = f->R.rdx;
+
+			/* TD : 2 need to validate fd, buf */ 
+			struct thread *cur = thread_current();
+
+			if(fd == 1){
+				putbuf(buf, size);
+				f->R.rax = size;
+			}else{
+				// 여기는 파일 open 구현하고...?
+				file_write(fd, buf, size);
+			}	
+			break;
+
+			
+		case SYS_WAIT :
+			tid_t tid = thread_current()->tid;
+			
+			process_wait(tid);
+		break;
+			
+		case SYS_EXEC :
+			// validate
+			char *file_name = f->R.rdi;
+			process_exec(file_name);
+		break;
+
+		case SYS_EXIT :
+				printf ("%s: exit(%d)\n", thread_current()-> name, f->R.rdi);
+				thread_exit();
+			break;
+			
+		}	
 }
