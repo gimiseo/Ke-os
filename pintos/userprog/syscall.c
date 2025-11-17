@@ -69,7 +69,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 			
 		case SYS_EXEC :
-			// validate
+			/* TD : need validate file_name */
 			char *file_name = f->R.rdi;
 			process_exec(file_name);
 		break;
