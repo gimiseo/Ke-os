@@ -41,8 +41,8 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
-    char name[128];
 	tid_t tid;
+	char copy_name[15];
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
@@ -50,12 +50,17 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	//모두가 행복한 세상
+	int i = 0;
+	while (file_name[i] != ' ' && file_name[i] != '\0')
+	{
+		copy_name[i] = file_name[i];
+		i++;
+	}
+	copy_name[i] = '\0';
 
-    strlcpy (name, file_name, strnlen(file_name, 128) + 1);
-    char *trash;
-    strtok_r(name, " ", &trash);
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (copy_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -208,7 +213,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-    for(int i =0; i< 1000000000; i++);
+	for (int i = 0; i < 1000000000; i++);
 	return -1;
 }
 
@@ -220,7 +225,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-    printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 	process_cleanup ();
 }
 
@@ -333,18 +338,17 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	//신규 처리 파일명 이상해서 안들어간다능
+	char *save;
+	char file_name_cp[128];
+	strlcpy(file_name_cp, file_name, 128);
+	strtok_r(file_name, " ", &save);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
-
-    /* Parse file name */
-    char ori_file[128];
-    strlcpy(ori_file, file_name, strlen(file_name) + 1);
-    char *trash;
-    strtok_r(file_name, " ", &trash);
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -424,63 +428,59 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-
+	//단어개수 세기
+	int argc = 0;
+	int byte_size = 0;
+	int count = 0;
+	int in_word = 0;
+	while (file_name_cp[count] != '\0')
+	{
+		if (file_name_cp[count] != ' ')
+		{
+			if (in_word == 0)
+			{
+				in_word = 1;
+				argc++;
+			}
+			byte_size++;
+		}
+		else
+		{
+			if (in_word != 0)
+				in_word = 0;
+		}
+		count++;
+	}
+	char *trash;
+	if_->rsp -= (byte_size + argc);
+	char *token;
+	char *curr = (char *)if_->rsp;
+	
+	token = strtok_r(file_name_cp, " ", &trash);
+	if ((byte_size + argc) % 8 != 0)
+		if_->rsp -= 8 - ((byte_size + argc) % 8);
+	memset((void *)if_->rsp, 0, 8 - ((byte_size + argc) % 8));
+	if_->rsp -= (argc + 2) * 8;
+	memset((void *)if_->rsp, 0, (argc + 2) * 8);
+	char **adress = (char **)if_->rsp;
+	for (count = 0; count < argc; count++)
+	{
+		strlcpy(curr, token, strlen(token) + 1);
+		adress++;
+		*adress = curr;
+		curr += strlen(token) + 1;
+		token = strtok_r(NULL, " ", &trash);
+	}
+	//Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
+	if_->R.rdi = argc;
+	if_->R.rsi = (uint64_t)(if_->rsp + 8);
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-    uintptr_t cur;
-
-    /* 1st loop - copy file */
-    char *iter = ori_file + strlen(ori_file);
-    while (iter >= ori_file) {
-        if_->rsp--;
-        if (*iter == '\0' || *iter == ' ') {
-            *(char *)if_->rsp = '\0';
-            while (*iter == '\0' || *iter == ' ') {
-                iter--;
-            }
-        } else {
-            *(char *)if_->rsp = *iter;
-            iter--;
-        }
-    }
-
-
-    /* 2nd loop - count nums of argv */
-    int rdi = 0;
-    cur = if_->rsp;
-    while (cur < USER_STACK) {
-        rdi++;
-        cur += strlen((char *)cur) + 1;
-    }
-
-    /* Side - word-align */
-    uintptr_t word_start = if_->rsp;
-    cur = if_->rsp;
-    while (cur % 8) {
-        cur--;
-        *(char *)cur = '\0';
-    }
-    if_->rsp = cur;
-
-    /* Side - make space for pointers */
-    if_->rsp -= 8 * (rdi + 2);
-    memset((char *)if_->rsp, 0, 8 * (rdi + 2));
-
-    /* 3rd loop - push pointers */
-    cur = if_->rsp;
-    cur += 8;
-    for (int i = 0; i < rdi; i++) {
-        *(uintptr_t *)cur = word_start;
-        cur += 8;
-        word_start += strlen((char *)word_start) + 1;
-    }
-
-    /* Side - register values */
-    if_->R.rdi = rdi;
-    if_->R.rsi = if_->rsp + 8;
-
-    // hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
+	// while(*save != NULL)
+	// {
+	// 	if (*save)
+	// }
+	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true); 
 	success = true;
 
 done:
