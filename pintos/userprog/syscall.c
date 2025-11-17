@@ -120,11 +120,17 @@ syscall_handler (struct intr_frame *f) {
         
         case SYS_CLOSE:
             fd = f->R.rdi;
+            
+            if (fd < 2 || fd >= MAX_FD) {
+                t->exit_num = -1;
+                thread_exit();
+            }
 
             if (t->fd_table[fd] != NULL) {
                 file_close(t->fd_table[fd]);
                 t->fd_table[fd] = NULL;
             }
+
             break;
     }
 }
