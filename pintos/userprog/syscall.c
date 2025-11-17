@@ -7,6 +7,9 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/init.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -37,10 +40,91 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+static void check_addr(char *addr) {
+    struct thread *t = thread_current();
+    if (addr == NULL || addr >= (char *)KERN_BASE || pml4_get_page(t->pml4, addr) == NULL) {
+        t->exit_num = -1;
+        thread_exit();
+    }
+}
+
+/* Arguments order: %rdi, %rsi, %rdx, %r10, %r8, %r9 */
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
+    int fd, status;
+    unsigned initial_size;
+    void *buffer;
+    char *file;
+    unsigned size;
+
+    struct thread *t = thread_current ();
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+    switch (f->R.rax) {
+        case SYS_HALT:
+            power_off();    
+            break;
+
+        case SYS_EXIT:
+            status = f->R.rdi;
+
+            t->exit_num = status;
+            thread_exit ();
+            break;
+
+        case SYS_CREATE:
+            file = (char *)f->R.rdi;
+            initial_size = f->R.rsi;
+
+            check_addr(file);
+            f->R.rax = filesys_create(file, initial_size);
+            break;
+
+        case SYS_REMOVE:
+            file = (char *)f->R.rdi;
+
+            check_addr(file);
+            f->R.rax = filesys_remove(file);
+            break;
+
+        case SYS_OPEN:
+            file = (char *)f->R.rdi;
+
+            check_addr(file);
+            ASSERT(t->next_fd < MAX_FD);
+
+            struct file *file_ptr = filesys_open(file);
+            if (file_ptr == NULL) {
+                f->R.rax = -1;
+            } else {
+                f->R.rax = t->next_fd;
+                t->fd_table[t->next_fd++] = file_ptr;
+            }
+            break;
+        
+        case SYS_READ:
+            fd = f->R.rdi;
+            buffer = (void *)f->R.rsi;
+            size = f->R.rdx;
+
+            break;
+
+        case SYS_WRITE:
+            fd = f->R.rdi;
+            buffer = (void *)f->R.rsi;
+            size = f->R.rdx;
+
+            putbuf(buffer, size);
+            f->R.rax = size;
+            break;
+        
+        case SYS_CLOSE:
+            fd = f->R.rdi;
+
+            if (t->fd_table[fd] != NULL) {
+                file_close(t->fd_table[fd]);
+                t->fd_table[fd] = NULL;
+            }
+            break;
+    }
 }

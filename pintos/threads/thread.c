@@ -280,7 +280,7 @@ thread_preempted (void)
 		return;
 	struct thread *curr = thread_current ();
 	struct thread *ready_front = list_entry (list_front(&ready_list), struct thread, elem);
-	if (curr->priority < ready_front->priority)
+	if (curr->priority < ready_front->priority) {
 		if (intr_context())
 		{
 			//이런 좋은게 있었구나.
@@ -288,6 +288,7 @@ thread_preempted (void)
 		}
 		else
 			thread_yield();
+    }
 }
 
 /* Project 1 - Alarm Clock */
@@ -612,6 +613,13 @@ init_thread (struct thread *t, const char *name, int priority) {
 	//project 1-4 advanced
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
+#ifdef USERPROG
+    t->exit_num = 0;
+    t->fd_table[0] = NULL; // STDIN
+    t->fd_table[1] = NULL; // STDOUT
+    t->next_fd = 2;
+#endif
+    
 	list_init(&(t->donation));
 }
 

@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "filesys/file.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -33,6 +34,8 @@ typedef int tid_t;
 #define NICE_MIN -20
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
+
+#define MAX_FD 256
 
 /* A kernel thread or user process.
  *
@@ -117,6 +120,10 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+    int exit_num;
+    struct file *fd_table[MAX_FD];
+    int next_fd;
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
