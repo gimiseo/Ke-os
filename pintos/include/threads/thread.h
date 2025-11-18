@@ -35,7 +35,7 @@ typedef int tid_t;
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
 
-#define MAX_FD 256
+#define MAX_FD 32
 
 /* A kernel thread or user process.
  *

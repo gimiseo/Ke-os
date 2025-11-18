@@ -118,7 +118,7 @@ syscall_handler (struct intr_frame *f) {
             buffer = (uint8_t *)f->R.rsi;
             size = f->R.rdx;
             
-            check_addr(buffer);
+            check_addr((char *)buffer);
             if (fd == 0) {
                 *buffer = input_getc();
                 f->R.rax = 1;
@@ -132,11 +132,11 @@ syscall_handler (struct intr_frame *f) {
 
         case SYS_WRITE:
             fd = f->R.rdi;
-            buffer = (char *)f->R.rsi;
+            buffer = (uint8_t *)f->R.rsi;
             size = f->R.rdx;
 
-            check_addr(buffer);
-            putbuf(buffer, size);
+            check_addr((char *)buffer);
+            putbuf((char *)buffer, size);
             f->R.rax = size;
             break;
         
