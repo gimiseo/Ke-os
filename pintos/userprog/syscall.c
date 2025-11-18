@@ -10,6 +10,7 @@
 #include "threads/init.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "devices/input.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -54,7 +55,7 @@ void
 syscall_handler (struct intr_frame *f) {
     int fd, status;
     unsigned initial_size;
-    void *buffer;
+    uint8_t *buffer;
     char *file;
     unsigned size;
 
@@ -102,18 +103,39 @@ syscall_handler (struct intr_frame *f) {
             }
             break;
         
+        case SYS_FILESIZE:
+            fd = f->R.rdi;
+
+            if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
+                f->R.rax = -1;
+            } else {
+                f->R.rax = (uint64_t)file_length(t->fd_table[fd]);
+            }
+            break;
+
         case SYS_READ:
             fd = f->R.rdi;
-            buffer = (void *)f->R.rsi;
+            buffer = (uint8_t *)f->R.rsi;
             size = f->R.rdx;
-
+            
+            check_addr(buffer);
+            if (fd == 0) {
+                *buffer = input_getc();
+                f->R.rax = 1;
+            } else if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
+                f->R.rax = -1;
+            } else {
+                off_t bytes_read = file_read(t->fd_table[fd], buffer, size);
+                f->R.rax = (uint64_t)bytes_read;
+            }
             break;
 
         case SYS_WRITE:
             fd = f->R.rdi;
-            buffer = (void *)f->R.rsi;
+            buffer = (char *)f->R.rsi;
             size = f->R.rdx;
 
+            check_addr(buffer);
             putbuf(buffer, size);
             f->R.rax = size;
             break;
