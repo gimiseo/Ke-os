@@ -136,8 +136,15 @@ syscall_handler (struct intr_frame *f) {
             size = f->R.rdx;
 
             check_addr((char *)buffer);
-            putbuf((char *)buffer, size);
-            f->R.rax = size;
+            if (fd == 1) {
+                putbuf((char *)buffer, size);
+                f->R.rax = size;
+            } else if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
+                f->R.rax = -1;
+            } else {
+                off_t bytes_written = file_write(t->fd_table[fd], buffer, size);
+                f->R.rax = (uint64_t)bytes_written;
+            }
             break;
         
         case SYS_CLOSE:
