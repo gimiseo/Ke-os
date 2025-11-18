@@ -54,7 +54,7 @@ static void check_addr(char *addr) {
 void
 syscall_handler (struct intr_frame *f) {
     int fd, status;
-    unsigned initial_size;
+    unsigned initial_size, position;
     uint8_t *buffer;
     char *file;
     unsigned size;
@@ -144,6 +144,27 @@ syscall_handler (struct intr_frame *f) {
             } else {
                 off_t bytes_written = file_write(t->fd_table[fd], buffer, size);
                 f->R.rax = (uint64_t)bytes_written;
+            }
+            break;
+        
+        case SYS_SEEK:
+            fd = f->R.rdi;
+            position = f->R.rsi;
+
+            if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
+                ;
+            } else {
+                file_seek(fd, position);
+            }
+            break;
+
+        case SYS_TELL:
+            fd = f->R.rdi;
+
+            if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
+                f->R.rax = 0;
+            } else {
+                file_tell(t->fd_table[fd]);
             }
             break;
         
