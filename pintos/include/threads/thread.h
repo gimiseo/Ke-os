@@ -117,6 +117,11 @@ struct thread {
 	int nice;
 	int recent_cpu;
 
+	/* progject 2 */
+	int exit_num;
+	int fd_next;
+	struct file *fd_table[32];
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

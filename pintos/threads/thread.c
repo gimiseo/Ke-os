@@ -613,6 +613,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
 	list_init(&(t->donation));
+
+	//project 2 exit
+	t->exit_num = 0;
+	t->fd_next = 2;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

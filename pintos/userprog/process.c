@@ -41,8 +41,8 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
-	char fn_copy2[32];
 	tid_t tid;
+	char copy_name[32];
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
@@ -50,13 +50,17 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	//모두가 행복한 세상
+	int i = 0;
+	while (file_name[i] != ' ' && file_name[i] != '\0')
+	{
+		copy_name[i] = file_name[i];
+		i++;
+	}
+	copy_name[i] = '\0';
 
-	/* 우선순위 안나오는 현상 제거 */
-	strlcpy (fn_copy2, file_name, sizeof(fn_copy2));
-	char *save;
-	char *prog_name = strtok_r(fn_copy2, " ", &save);
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (prog_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (copy_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -100,7 +104,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
- 
+
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
 
@@ -200,7 +204,7 @@ process_exec (void *f_name) {
  * exception), returns -1.  If TID is invalid or if it was not a
  * child of the calling process, or if process_wait() has already
  * been successfully called for the given TID, returns -1
- * immediately, without waiting.	
+ * immediately, without waiting.
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
@@ -209,14 +213,11 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	int tmp = 1000;
+	int tmp = 1500;
 	while(tmp != 0){
 		tmp--;
 		thread_yield();
 	}
-	
-
-
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -227,6 +228,11 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	if(curr->pml4 == NULL){
+		process_cleanup();
+		return;
+	}
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 	process_cleanup ();
 }
 
@@ -238,7 +244,6 @@ process_cleanup (void) {
 #ifdef VM
 	supplemental_page_table_kill (&curr->spt);
 #endif
-
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
@@ -339,24 +344,17 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	int argc = 0;
+	//신규 처리 파일명 이상해서 안들어간다능
+	char *save;
+	char file_name_cp[128];
+	strlcpy(file_name_cp, file_name, 128);
+	strtok_r(file_name, " ", &save);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
-
-	/* [hs] argument passing */
-	char *token, *saveptr;
-	int cnt_size = 0;
-
-	for(token = strtok_r(file_name, " ", &saveptr); token != NULL;
-	token = strtok_r(NULL, " ", &saveptr)){
-		cnt_size += strlen(token) + 1;
-		argc++;
-	}
-
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -436,52 +434,59 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-	 
-	/* [hs] argument passing */
-	if_->rsp -= cnt_size;
-	char *ptr_s = if_->rsp;
-	char *ptr_f = file_name; 
-	char *argv[32];
-	argv[0] = ptr_s; //시작 주소
-	int cnt = 1;
-
-	// stack에 저장
-	for(int i = 0; i < cnt_size; ++i){
-		*ptr_s = *ptr_f;
-		if(*ptr_f == '\0'){
-			argv[cnt++] = ptr_s+1;
+	//단어개수 세기
+	int argc = 0;
+	int byte_size = 0;
+	int count = 0;
+	int in_word = 0;
+	while (file_name_cp[count] != '\0')
+	{
+		if (file_name_cp[count] != ' ')
+		{
+			if (in_word == 0)
+			{
+				in_word = 1;
+				argc++;
+			}
+			byte_size++;
 		}
-		ptr_s++;
-		ptr_f++;
+		else
+		{
+			if (in_word != 0)
+				in_word = 0;
+		}
+		count++;
 	}
-
+	char *trash;
+	if_->rsp -= (byte_size + argc);
+	char *token;
+	char *curr = (char *)if_->rsp;
 	
-	// padding
-	if(cnt_size % 8 != 0){
-		int up = (cnt_size + 7) & ~7;
-		int need = up - cnt_size;
-		if_->rsp -= need;
-		memset(if_->rsp, 0, need);
+	token = strtok_r(file_name_cp, " ", &trash);
+	if ((byte_size + argc) % 8 != 0)
+		if_->rsp -= 8 - ((byte_size + argc) % 8);
+	memset((void *)if_->rsp, 0, 8 - ((byte_size + argc) % 8));
+	if_->rsp -= (argc + 2) * 8;
+	memset((void *)if_->rsp, 0, (argc + 2) * 8);
+	char **adress = (char **)if_->rsp;
+	for (count = 0; count < argc; count++)
+	{
+		strlcpy(curr, token, strlen(token) + 1);
+		adress++;
+		*adress = curr;
+		curr += strlen(token) + 1;
+		token = strtok_r(NULL, " ", &trash);
 	}
-
-	// argv[ ] stack에 저장
-	if_->rsp -= (argc+1) * 8;
-	char *s_ptr = if_->rsp;
-	if_->R.rsi = if_->rsp;
-
-	for(int i = 0; i < argc; ++i){
-		memcpy(s_ptr, &argv[i], 8);
-		s_ptr += 8;
-	}
-
+	//Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
 	if_->R.rdi = argc;
-
-	// return address
-	if_->rsp -= 8;
-	uint64_t *fill = 0;
-	memcpy(if_->rsp, &fill, 8);
-	
-	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
+	if_->R.rsi = (uint64_t)(if_->rsp + 8);
+	/* TODO: Your code goes here.
+	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	// while(*save != NULL)
+	// {
+	// 	if (*save)
+	// }
+	// hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true); 
 	success = true;
 
 done:
