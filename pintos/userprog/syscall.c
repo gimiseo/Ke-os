@@ -230,5 +230,14 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = file_length(file);
 			break;
 		}
+
+		case SYS_FORK : {
+			char *process_name;
+			if(process_fork(process_name, f)==0){
+				
+			}
+			process_wait();
+			break;
+		}
 	}	
 }

@@ -100,22 +100,24 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	void *newpage;
 	bool writable;
 
-	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-
+	/* 1. TODO: If the parent_page is kernel page, then return immediately. 
+		1.	부모 페이지가 커널 페이지라면 즉시 반환하라.*/
+	
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
-	 *    TODO: NEWPAGE. */
+	 *    TODO: NEWPAGE. 
+	 	자식용으로 PAL_USER 페이지를 새로 할당하고, 그 주소를 newpage에 저장하라.*/
 
-	/* 4. TODO: Duplicate parent's page to the new page and
-	 *    TODO: check whether parent's page is writable or not (set WRITABLE
-	 *    TODO: according to the result). */
+	/* 4.\부모의 페이지 내용을 newpage로 복사하고,
+		부모 페이지가 writable인지 확인해서, 
+		그 결과에 따라 writable 플래그를 설정하라.. */
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
-		/* 6. TODO: if fail to insert page, do error handling. */
+		/* 6.페이지 테이블 삽입에 실패하면 오류 처리를 하라. */
 	}
 	return true;
 }
@@ -125,6 +127,9 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
+/* 부모의 실행 컨텍스트를 복사한다.
+	parent->tf 에는 사용자 영역의 실행 컨텍스트가 저장되어 있지 않다.
+	process-fork의 두 번째 인자를 이 함수로 전달해야 한다. */
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
@@ -151,13 +156,9 @@ __do_fork (void *aux) {
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
-
-	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
-
+	/** 파일 객체 복사할 때는 file_duplicate 사용
+	 * 부모 프로세스는 자식이 부모의 자원을 모두 성공적으로 복제할 때까지 fork()에서 반환되면 안된다.
+	 */
 	process_init ();
 
 	/* Finally, switch to the newly created process. */
