@@ -10,6 +10,7 @@
 #include "lib/kernel/stdio.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "console.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -68,7 +69,7 @@ validate_fn (char *file_name) {
 		thread_exit();
 	}
 }
-
+void
 validate_fd_file (int fd) {
 	// fd확인
 	struct thread *cur = thread_current();
@@ -79,6 +80,15 @@ validate_fd_file (int fd) {
 	// file 확인
 	struct file *file = cur->fd_table[fd];
 	if(file == NULL){
+		cur->exit_num = -1;
+		thread_exit();
+	}
+}
+
+void
+validate_fd (int fd) {
+	struct thread *cur = thread_current();
+	if(fd < 0 || fd > 32){
 		cur->exit_num = -1;
 		thread_exit();
 	}
@@ -96,12 +106,17 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 
 			/* TD : 2 need to validate fd, buf */ 
 			struct thread *cur = thread_current();
+			/* [11.19] 검증 추가  */
+			validate_fd(fd);
+			validate_addr(buf);
 
 			if(fd == 1){
 				putbuf(buf, size);
 				f->R.rax = size;
-			}else{
-				file_write(fd, buf, size);
+			}else if(fd>=2){ // [11.19] 파일 작성 처리
+				struct file *file = cur->fd_table[fd];
+				off_t n = file_write(file, buf, size);
+				f->R.rax = n;
 			}	
 			break;
 			
