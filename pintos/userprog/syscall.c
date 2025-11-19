@@ -69,6 +69,20 @@ validate_fn (char *file_name) {
 	}
 }
 
+validate_fd_file (int fd) {
+	// fd확인
+	struct thread *cur = thread_current();
+	if(fd < 0 || fd > 32){
+		cur->exit_num = -1;
+		thread_exit();
+	}
+	// file 확인
+	struct file *file = cur->fd_table[fd];
+	if(file == NULL){
+		cur->exit_num = -1;
+		thread_exit();
+	}
+}
 
 /* The main system call interface */
 void syscall_handler (struct intr_frame *f UNUSED) {
@@ -87,8 +101,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 				putbuf(buf, size);
 				f->R.rax = size;
 			}else{
-				// 여기는 파일 open 구현하고...?
-				// file_write(fd, buf, size);
+				file_write(fd, buf, size);
 			}	
 			break;
 			
@@ -162,20 +175,44 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 
 		case SYS_CLOSE : {
 			int fd = f->R.rdi; //요청 fd 가져오기
-			struct thread *curr = thread_current(); 
-			struct file *file = curr->fd_table[fd]; //fd에 해당하는 file가져오기
-			// validate fd & file
-			if(fd < 0 || fd > 32){
-				curr->exit_num = -1;
-				thread_exit();
-			}
-			if(file == NULL) {
-				curr->exit_num = -1;
-				thread_exit();
-			}
-
-			curr->fd_table[fd] = NULL;
+			validate_fd_file(fd);
+			struct thread *cur = thread_current();
+			struct file *file = cur->fd_table[fd];
+			cur->fd_table[fd] = NULL;
 			file_close(file);
+			break;
+		}
+
+		case SYS_READ : {
+			int fd = f->R.rdi;
+			char *buffer = f->R.rsi;
+			unsigned sz = f->R.rdx;		
+			// fd 검증
+			validate_fd_file(fd);
+			validate_addr(buffer);
+
+			if(fd == 0){
+				uint8_t key = input_getc();
+    			((uint8_t *)buffer)[0] = key;
+    			f->R.rax = 1;
+				break;
+			} else if(fd >= 2){
+				struct thread *cur = thread_current();
+				struct file *file = cur->fd_table[fd];
+				off_t n = file_read(file, buffer, sz);
+				f->R.rax = n;
+			}
+			break;
+		}
+
+		case SYS_FILESIZE : {
+			int fd = f->R.rdi;
+			if(fd < 0 || fd > 32){
+				cur->exit_num = -1;
+				thread_exit();
+			}
+			struct file *file = thread_current()->fd_table[fd];
+			f->R.rax = file_length(file);
 			break;
 		}
 	}	
