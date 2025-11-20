@@ -11,6 +11,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/input.h"
+#include "threads/palloc.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -81,9 +82,21 @@ syscall_handler (struct intr_frame *f) {
 
         case SYS_EXEC:
             cmd_line = (char *)f->R.rdi;
-            if (process_exec(cmd_line) == -1) {
-                f->R.rax = -1;
+            
+            check_addr(cmd_line);
+            char *fn_copy;
+            fn_copy = palloc_get_page(0);
+            if (fn_copy == NULL) {
+                thread_current()->exit_num = -1;
+                thread_exit();
+            } else {
+                strlcpy(fn_copy, cmd_line, PGSIZE);
+                if (process_exec(fn_copy) == -1) {
+                    thread_current()->exit_num = -1;
+                    thread_exit();
+                }
             }
+
             break;
         
         case SYS_WAIT:
