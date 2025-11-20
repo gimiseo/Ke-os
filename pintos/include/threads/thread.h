@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -35,6 +36,8 @@ typedef int tid_t;
 #define NICE_MIN -20
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
+/*project 2 advanced*/
+#define FILE_MAX 128
 
 /* A kernel thread or user process.
  *
@@ -115,12 +118,20 @@ struct thread {
 	/*project 1-4 - advenced*/
 	int nice;
 	int recent_cpu;
-
-	int exit_num;
-
+	/*~~project 2 여기까지*/
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	/*project 2 추가*/
+	int exit_num;
+	struct file *file_descrs[FILE_MAX];
+	int next_num;
+	struct intr_frame parent_if;
+	struct thread *parent;				/*아부지*/
+	struct list childs;					/*자식 리스트*/
+	struct list_elem child_elem;		/*자식 될수도*/
+	struct semaphore wait;				/*wait용 세마*/
+	struct semaphore load;				/*자식 로드 세마*/
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

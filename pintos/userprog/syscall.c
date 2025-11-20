@@ -53,37 +53,110 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-static bool
+static void
 user_memory_access (const void *addr){
 	if (addr == NULL || addr > KERN_BASE || 
-		pml4_get_page(thread_current()->pml4, addr) == NULL)
-		return FALSE;
-	return TRUE;
+		pml4_get_page(thread_current()->pml4, addr) == NULL) {
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
 }
 
 static bool
 create (const char *file, unsigned initial_size) {
-	if (user_memory_access(file) != TRUE)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
-		return FALSE;
-	}
-	if(filesys_create(file, initial_size))
+	user_memory_access(file);
+	if (filesys_create(file, initial_size))
 		return TRUE;
 	else
 		return FALSE;
 }
 
+static int
+open (const char *file_name) {
+	struct file *file = NULL;
+	struct thread *curr = thread_current();
+	int fd;
+	user_memory_access(file_name);
+	file = filesys_open (file_name);
+	fd = curr->next_num;
+	if (file == NULL || fd >= FILE_MAX)
+		return -1;
+	curr->file_descrs[fd] = file;
+	curr->next_num++;
+	return fd;
+}
+
+static void
+close (int fd) {
+	struct file *file = NULL;
+	struct thread *curr = thread_current();
+	if (fd < 0 || fd >= FILE_MAX) {
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	file = curr->file_descrs[fd];
+	if (file == NULL)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	file_close(file);
+	curr->file_descrs[fd] = NULL;
+}
+
+static int
+read (int fd, void *buffer, unsigned size) {
+	struct file *file = NULL;
+	struct thread *curr = thread_current();
+	user_memory_access(buffer);
+	int read_byte;
+	if (fd < 0 || fd >= FILE_MAX || fd == 1)
+		return -1;
+	// if (fd == 0) { 보류
+	// 	input_getc();
+	// }
+	file = curr->file_descrs[fd];
+	if (file == NULL)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	read_byte = file_read (file, buffer, size);
+	return read_byte;
+}
+
+static int
+write (int fd, void *buffer, unsigned size) {
+	struct file *file = NULL;
+	struct thread *curr = thread_current();
+	user_memory_access(buffer);
+	int read_byte;
+	if (fd < 0 || fd >= FILE_MAX || fd == 0)
+		return -1;
+	file = curr->file_descrs[fd];
+	if (file == NULL)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	read_byte = file_write (file, buffer, size);
+	return read_byte;
+}
+
+
+static tid_t 
+fork (const char *thread_name, struct intr_frame *f) {
+	tid_t tid;
+	user_memory_access(thread_name);
+	return process_fork(thread_name, f);
+}
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
 	int syscall_num = f->R.rax;
 
-	int fd;
-	void *buf;
 	size_t size;
 	switch(syscall_num){
 		case SYS_HALT:
@@ -94,12 +167,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			thread_current()->exit_num = (int)f->R.rdi;
 			thread_exit ();
 			break;
-		case SYS_WRITE:
-			// f->R.rax = write(f->R.rdi,(void *)f->R.rsi, f->R.rdx);
-			buf = f->R.rsi;
-			size = f->R.rdx;
-			putbuf(buf,size);
-			f->R.rax = size;
+		case SYS_FORK:
+			f->R.rax = fork(f->R.rdi, f);
+			break;
+		case SYS_WAIT:
+			f->R.rax = process_wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
 			if(create((char *)f->R.rdi, (unsigned)f->R.rsi))
@@ -107,5 +179,34 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			else
 				f->R.rax = FALSE;
 			break;
+		case SYS_OPEN:
+			f->R.rax = open(f->R.rdi);
+			break;
+		case SYS_FILESIZE:
+			int fd = f->R.rdi;
+			if (fd < 2 || fd >= FILE_MAX || thread_current()->file_descrs[fd] == NULL){
+				f->R.rax = -1;
+			}
+			else {
+				f->R.rax = (uint64_t)file_length(thread_current()->file_descrs[fd]);
+			}
+			break;
+		case SYS_READ:
+			f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
+		case SYS_CLOSE:
+			close(f->R.rdi);
+			break;
+		case SYS_WRITE:
+			if (f->R.rdi == 1)
+			{
+				putbuf(f->R.rsi,f->R.rdx);
+				f->R.rax = size;
+			}
+			else {
+				f->R.rax = write(f->R.rdi,f->R.rsi, f->R.rdx);
+			}
+			break;
+		
 	}
 }

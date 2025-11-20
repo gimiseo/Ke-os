@@ -217,6 +217,11 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	//thread
+	struct thread *parent = thread_current();
+	t->parent = parent;
+	list_push_front(&(parent->childs), &(t->child_elem));
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -615,6 +620,19 @@ init_thread (struct thread *t, const char *name, int priority) {
 	//project 1-4 advanced
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
+	//project 2 가능 디스크립터 초기값
+	
+	#ifdef USERPROG
+	/* Owned by userprog/process.c. */
+	t->exit_num = 0;
+	t->file_descrs[0] = NULL;
+	t->file_descrs[1] = NULL;
+	t->next_num = 2;
+	list_init(&(t->childs));
+	t->parent = NULL;
+	sema_init(&t->wait, 0);
+	sema_init(&t->load, 0);
+	#endif
 	list_init(&(t->donation));
 }
 
