@@ -102,15 +102,8 @@ process_fork (const char *name, struct intr_frame *if_) {
 			break;
 		}
     }
-	// 자식이 로드되다가 오류로 exit한 경우
 	if (child->exit_num == TID_ERROR)
 	{
-		// 자식이 종료되었으므로 자식 리스트에서 제거한다.
-		// 이거 넣으면 간헐적으로 실패함 (syn-read)
-		// list_remove(&child->child_elem);
-		// 자식이 완전히 종료되고 스케줄링이 이어질 수 있도록 자식에게 signal을 보낸다.
-		// sema_up(&child->exit_sema);
-		// 자식 프로세스의 pid가 아닌 TID_ERROR를 반환한다.
 		return TID_ERROR;
 	}
 	return child_tid;
@@ -279,9 +272,11 @@ process_wait (tid_t child_tid) {
         if (child->tid == child_tid)
 		{
 			sema_down(&child->wait);
+			list_remove(&child->child_elem);
 			return child->exit_num;
 		}
     }
+	return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

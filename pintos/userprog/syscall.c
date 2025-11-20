@@ -10,6 +10,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "threads/palloc.h"
 
 //true, flase define
 #define TRUE 1
@@ -143,6 +144,24 @@ write (int fd, void *buffer, unsigned size) {
 	return read_byte;
 }
 
+static void
+exec (const char *cmd_line) {
+	char *fn_copy;
+	user_memory_access(cmd_line);
+	fn_copy = palloc_get_page (0);
+	if (fn_copy == NULL)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	strlcpy (fn_copy, cmd_line, PGSIZE);
+	if (process_exec(fn_copy) == -1)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+}
+
 
 static tid_t 
 fork (const char *thread_name, struct intr_frame *f) {
@@ -169,6 +188,9 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_FORK:
 			f->R.rax = fork(f->R.rdi, f);
+			break;
+		case SYS_EXEC:
+			exec(f->R.rdi);
 			break;
 		case SYS_WAIT:
 			f->R.rax = process_wait(f->R.rdi);
@@ -207,6 +229,5 @@ syscall_handler (struct intr_frame *f) {
 				f->R.rax = write(f->R.rdi,f->R.rsi, f->R.rdx);
 			}
 			break;
-		
 	}
 }
