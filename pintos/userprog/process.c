@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -50,7 +51,7 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-	//모두가 행복한 세상
+
 	int i = 0;
 	while (file_name[i] != ' ' && file_name[i] != '\0')
 	{
@@ -83,10 +84,30 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+    struct thread *t = thread_current();
+    struct thread *child;
+    memcpy(&t->tf_fork, if_, sizeof(struct intr_frame));
+	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, t);
+    
+    if (tid == TID_ERROR) {
+        return TID_ERROR;
+    }
+
+    struct list_elem *iter;
+	for (iter = list_begin (&t->childs);
+        iter != list_end (&t->childs);
+        iter = list_next (iter)) {
+        child = list_entry (iter, struct thread, child_elem);
+        if (child->tid == tid)
+		{
+			sema_down(&child->sema_load);
+			break;
+		}
+    }
+
+    return tid;
 }
 
 #ifndef VM
@@ -101,21 +122,32 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-
+    if (is_kernel_vaddr(va)) {
+        return true;
+    }
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
+    ASSERT(parent_page != NULL);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+    newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    if (newpage == NULL) {
+        return false;
+    }
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+    memcpy(newpage, parent_page, PGSIZE);
+    writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+        palloc_free_page(newpage);
+        return false;
 	}
 	return true;
 }
@@ -128,14 +160,15 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = &parent->tf_fork;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+    if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -157,7 +190,17 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+    for (int i = 0; i < MAX_FD; i++) {
+		struct file *file = parent->fd_table[i];
+		if (file == NULL)
+			continue;
+		if (i >= 2)
+			file = file_duplicate(file);
+		current->fd_table[i] = file;
+	}
+	current->next_fd = parent->next_fd;
 
+	sema_up(&current->sema_load);
 	process_init ();
 
 	/* Finally, switch to the newly created process. */
@@ -209,11 +252,23 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	for (int i = 0; i < 2000000000; i++);
+process_wait (tid_t child_tid) {
+	struct thread *t = thread_current();
+    struct thread *child;
+    struct list_elem *iter;
+    int child_exit;
+
+    for (iter = list_begin(&t->childs);
+         iter != list_end(&t->childs);
+         iter = list_next(iter)) {
+        child = list_entry (iter, struct thread, child_elem);
+        if (child->tid == child_tid) {
+            sema_down(&child->sema_wait);
+            list_remove(iter);
+            child_exit = child->exit_num;
+            return child_exit;
+        }
+    }
 	return -1;
 }
 
@@ -221,11 +276,11 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
-	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+    if (curr->pml4) {
+	    printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+    }
+
+    sema_up(&curr->sema_wait);
 	process_cleanup ();
 }
 

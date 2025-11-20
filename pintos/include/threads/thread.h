@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "filesys/file.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -124,6 +125,13 @@ struct thread {
     struct file *fd_table[MAX_FD];
     int next_fd;
 
+    struct semaphore sema_wait;
+    struct thread *parent_thread;
+    struct list childs;
+    struct list_elem child_elem;
+
+    struct intr_frame tf_fork;
+    struct semaphore sema_load;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

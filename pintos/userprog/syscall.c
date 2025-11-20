@@ -53,10 +53,10 @@ static void check_addr(char *addr) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
-    int fd, status;
+    int fd, status, pid;
     unsigned initial_size, position;
     uint8_t *buffer;
-    char *file;
+    char *file, *thread_name, *cmd_line;
     unsigned size;
 
     struct thread *t = thread_current ();
@@ -72,7 +72,25 @@ syscall_handler (struct intr_frame *f) {
             t->exit_num = status;
             thread_exit ();
             break;
+        
+        case SYS_FORK:
+            thread_name = (char *)f->R.rdi;
+            check_addr(thread_name);
+            f->R.rax = process_fork(thread_name, f);
+            break;
 
+        case SYS_EXEC:
+            cmd_line = (char *)f->R.rdi;
+            if (process_exec(cmd_line) == -1) {
+                f->R.rax = -1;
+            }
+            break;
+        
+        case SYS_WAIT:
+            pid = f->R.rdi;
+            f->R.rax = process_wait(pid);
+            break;
+        
         case SYS_CREATE:
             file = (char *)f->R.rdi;
             initial_size = f->R.rsi;
