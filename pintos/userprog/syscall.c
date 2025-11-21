@@ -10,6 +10,7 @@
 #include "lib/kernel/stdio.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "userprog/process.h"
 #include "console.h"
 
 void syscall_entry (void);
@@ -121,8 +122,9 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 			
 		case SYS_WAIT :
-			tid_t tid = thread_current()->tid;
-			process_wait(tid);
+			int pid = f->R.rdi;
+			int status = process_wait(pid);
+			f->R.rax = status;
 			break;
 			
 		case SYS_EXEC : {
@@ -147,7 +149,6 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_EXIT : {
 			struct thread *curr = thread_current();
 			curr->exit_num = f->R.rdi;
-			// printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 			thread_exit();
 			break;
 		}
@@ -232,11 +233,10 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		}
 
 		case SYS_FORK : {
-			char *process_name;
-			if(process_fork(process_name, f)==0){
-				
-			}
-			process_wait();
+			char *process_name = f->R.rdi;
+			validate_addr(process_name);
+			tid_t tid = process_fork(process_name, f);
+			f->R.rax = tid;
 			break;
 		}
 	}	
