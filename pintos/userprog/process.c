@@ -206,7 +206,6 @@ __do_fork (void *aux) {
 		current->file_descrs[i] = file;
 	}
 	current->next_num = parent->next_num;
-	current->exec_file = file_duplicate(parent->exec_file);
 	
 	//부모 대기 해제
 	sema_up(&current->load);
@@ -427,10 +426,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	if (t->exec_file != NULL) {
-		file_close(t->exec_file);
-		t->exec_file = NULL;
-	}
+	// if (t->exec_file != NULL) {
+	// 	file_close(t->exec_file);
+	// 	t->exec_file = NULL;
+	// }
+	//필요없음
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
