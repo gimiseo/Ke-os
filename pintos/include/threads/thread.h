@@ -132,6 +132,7 @@ struct thread {
 	struct list_elem child_elem;		/*자식 될수도*/
 	struct semaphore wait;				/*wait용 세마*/
 	struct semaphore load;				/*자식 로드 세마*/
+	struct file *exec_file;				/*열어놔라*/
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

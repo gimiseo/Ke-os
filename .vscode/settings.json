@@ -6,6 +6,14 @@
         "stddef.h": "c",
         "intrinsic.h": "c",
         "*.inc": "c",
-        "lib.h": "c"
+        "lib.h": "c",
+        "thread.h": "c",
+        "filesys.h": "c",
+        "free-map.h": "c",
+        "process.h": "c",
+        "palloc.h": "c",
+        "inode.h": "c",
+        "file.h": "c",
+        "mmu.h": "c"
     }
 }

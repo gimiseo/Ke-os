@@ -3,6 +3,7 @@
 #include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <stdio.h>
 
 void
 test_main (void) 
@@ -19,7 +20,6 @@ test_main (void)
   seek (handle, 0);
   CHECK (write (handle, buffer, sizeof buffer) == (int) sizeof buffer,
          "write \"child-rox\"");
-
   /* Execute child-rox and wait for it. */
   msg ("exec \"%s\"", child_cmd);
   if (!(child = fork ("child-rox"))){

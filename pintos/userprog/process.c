@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "threads/synch.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -199,12 +200,13 @@ __do_fork (void *aux) {
 		struct file *file = parent->file_descrs[i];
 		if (file == NULL)
 			continue;
-		if (file > 2)
+		if (i >= 2)
 			file = file_duplicate(file);
 		current->file_descrs[i] = file;
 	}
 	current->next_num = parent->next_num;
-
+	current->exec_file = file_duplicate(parent->exec_file);
+	
 	//부모 대기 해제
 	sema_up(&current->load);
 	process_init ();
@@ -230,6 +232,7 @@ process_exec (void *f_name) {
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
+
 
 	/* We first kill the current context */
 	process_cleanup ();
@@ -275,7 +278,7 @@ process_wait (tid_t child_tid) {
 			list_remove(&child->child_elem);
 			return child->exit_num;
 		}
-    }
+    }  
 	return -1;
 }
 
@@ -290,6 +293,10 @@ process_exit (void) {
 	if (curr->pml4 != NULL) {
 		printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 	}
+	struct file *file = curr->exec_file;
+	
+	if (curr->exec_file != NULL)
+		file_close(curr->exec_file);
 	sema_up(&curr->wait);
 	process_cleanup ();
 }
@@ -415,6 +422,10 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	if (t->exec_file != NULL) {
+		file_close(t->exec_file);
+		t->exec_file = NULL;
+	}
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
@@ -550,7 +561,11 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if (success) {
+		file_deny_write(file);
+		t->exec_file = file;
+	}
+	// file_close(file);
 	return success;
 }
 

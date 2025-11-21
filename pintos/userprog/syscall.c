@@ -134,6 +134,13 @@ write (int fd, void *buffer, unsigned size) {
 	int read_byte;
 	if (fd < 0 || fd >= FILE_MAX || fd == 0)
 		return -1;
+	if (fd == 1)
+	{
+		char f_buffer[size+1];
+		strlcpy(f_buffer, (char *)buffer, size + 1);
+		putbuf(f_buffer, size);
+		return size;
+	}
 	file = curr->file_descrs[fd];
 	if (file == NULL)
 	{
@@ -141,6 +148,11 @@ write (int fd, void *buffer, unsigned size) {
 		thread_exit ();
 	}
 	read_byte = file_write (file, buffer, size);
+	if (read_byte == -1)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
 	return read_byte;
 }
 
@@ -162,6 +174,15 @@ exec (const char *cmd_line) {
 	}
 }
 
+static void
+seek (int fd, off_t new_pos) {
+	struct file * file = thread_current()->file_descrs[fd];
+	if (fd < 2 || fd >= FILE_MAX || file == NULL) {
+		return;
+	}
+	else
+		file_seek(file, new_pos);
+}
 
 static tid_t 
 fork (const char *thread_name, struct intr_frame *f) {
@@ -216,18 +237,14 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_READ:
 			f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 			break;
+		case SYS_SEEK:
+			seek(f->R.rdi, f->R.rsi);
+			break;
 		case SYS_CLOSE:
 			close(f->R.rdi);
 			break;
 		case SYS_WRITE:
-			if (f->R.rdi == 1)
-			{
-				putbuf(f->R.rsi,f->R.rdx);
-				f->R.rax = size;
-			}
-			else {
-				f->R.rax = write(f->R.rdi,f->R.rsi, f->R.rdx);
-			}
+			f->R.rax = write(f->R.rdi,f->R.rsi, f->R.rdx);
 			break;
 	}
 }
