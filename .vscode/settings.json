@@ -14,6 +14,9 @@
         "palloc.h": "c",
         "inode.h": "c",
         "file.h": "c",
-        "mmu.h": "c"
+        "mmu.h": "c",
+        "synch.h": "c",
+        "interrupt.h": "c",
+        "vm.h": "c"
     }
 }

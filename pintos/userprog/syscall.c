@@ -11,6 +11,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 
 //true, flase define
 #define TRUE 1
@@ -19,6 +20,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+struct lock filesys_lock;
 
 // int write (int fd, const void *buffer, unsigned size)
 // {
@@ -52,6 +54,7 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	lock_init(&filesys_lock);
 }
 
 static void
@@ -66,10 +69,16 @@ user_memory_access (const void *addr){
 static bool
 create (const char *file, unsigned initial_size) {
 	user_memory_access(file);
-	if (filesys_create(file, initial_size))
+	lock_acquire(&filesys_lock);
+	if (filesys_create(file, initial_size)){
+		lock_release(&filesys_lock);
 		return TRUE;
-	else
+	}
+	else {
+		lock_release(&filesys_lock);
 		return FALSE;
+	}
+		
 }
 
 static int
@@ -78,12 +87,16 @@ open (const char *file_name) {
 	struct thread *curr = thread_current();
 	int fd;
 	user_memory_access(file_name);
+	lock_acquire(&filesys_lock);
 	file = filesys_open (file_name);
 	fd = curr->next_num;
-	if (file == NULL || fd >= FILE_MAX)
+	if (file == NULL || fd >= FILE_MAX) {
+		lock_release(&filesys_lock);
 		return -1;
+	}
 	curr->file_descrs[fd] = file;
 	curr->next_num++;
+	lock_release(&filesys_lock);
 	return fd;
 }
 
@@ -113,16 +126,27 @@ read (int fd, void *buffer, unsigned size) {
 	int read_byte;
 	if (fd < 0 || fd >= FILE_MAX || fd == 1)
 		return -1;
-	// if (fd == 0) { 보류
-	// 	input_getc();
-	// }
+	
+	if (fd == 0) {
+		char *ptr = (char *)buffer;
+		lock_acquire(&filesys_lock);
+		for (int i = 0; i < size; i++)
+		{
+			*ptr++ = input_getc();
+			read_byte++;
+		}
+		lock_release(&filesys_lock);
+		return read_byte;
+	}
 	file = curr->file_descrs[fd];
 	if (file == NULL)
 	{
 		thread_current()->exit_num = -1;
 		thread_exit ();
 	}
+	lock_acquire(&filesys_lock);
 	read_byte = file_read (file, buffer, size);
+	lock_release(&filesys_lock);
 	return read_byte;
 }
 
@@ -147,7 +171,9 @@ write (int fd, void *buffer, unsigned size) {
 		thread_current()->exit_num = -1;
 		thread_exit ();
 	}
+	lock_acquire(&filesys_lock);
 	read_byte = file_write (file, buffer, size);
+	lock_release(&filesys_lock);
 	if (read_byte == -1)
 	{
 		thread_current()->exit_num = -1;
@@ -190,6 +216,12 @@ fork (const char *thread_name, struct intr_frame *f) {
 	user_memory_access(thread_name);
 	return process_fork(thread_name, f);
 }
+static bool 
+remove(const char *file)
+{
+	user_memory_access(file);
+	return filesys_remove(file);
+}
 
 /* The main system call interface */
 void
@@ -221,6 +253,9 @@ syscall_handler (struct intr_frame *f) {
 				f->R.rax = TRUE;
 			else
 				f->R.rax = FALSE;
+			break;
+		case SYS_REMOVE:
+			f->R.rax = remove(f->R.rdi);
 			break;
 		case SYS_OPEN:
 			f->R.rax = open(f->R.rdi);

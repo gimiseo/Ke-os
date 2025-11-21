@@ -632,6 +632,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->parent = NULL;
 	sema_init(&t->wait, 0);
 	sema_init(&t->load, 0);
+	sema_init(&t->waiting_parents, 0);
 	t->exec_file = NULL;
 	#endif
 	list_init(&(t->donation));
