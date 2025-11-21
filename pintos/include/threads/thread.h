@@ -122,6 +122,7 @@ struct thread {
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
     int exit_num;
+    struct file *exec_file;
     struct file *fd_table[MAX_FD];
     int next_fd;
 

@@ -56,7 +56,7 @@ void
 syscall_handler (struct intr_frame *f) {
     int fd, status, pid;
     unsigned initial_size, position;
-    uint8_t *buffer;
+    char *buffer;
     char *file, *thread_name, *cmd_line;
     unsigned size;
 
@@ -146,7 +146,7 @@ syscall_handler (struct intr_frame *f) {
 
         case SYS_READ:
             fd = f->R.rdi;
-            buffer = (uint8_t *)f->R.rsi;
+            buffer = (char *)f->R.rsi;
             size = f->R.rdx;
             
             check_addr((char *)buffer);
@@ -163,7 +163,7 @@ syscall_handler (struct intr_frame *f) {
 
         case SYS_WRITE:
             fd = f->R.rdi;
-            buffer = (uint8_t *)f->R.rsi;
+            buffer = (char *)f->R.rsi;
             size = f->R.rdx;
 
             check_addr((char *)buffer);
@@ -185,7 +185,7 @@ syscall_handler (struct intr_frame *f) {
             if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
                 ;
             } else {
-                file_seek(fd, position);
+                file_seek(t->fd_table[fd], position);
             }
             break;
 

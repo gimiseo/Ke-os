@@ -199,6 +199,7 @@ __do_fork (void *aux) {
 		current->fd_table[i] = file;
 	}
 	current->next_fd = parent->next_fd;
+    current->exec_file = file_duplicate(parent->exec_file);
 
 	sema_up(&current->sema_load);
 	process_init ();
@@ -279,7 +280,7 @@ process_exit (void) {
     if (curr->pml4) {
 	    printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
     }
-
+    file_close(curr->exec_file);
     sema_up(&curr->sema_wait);
 	process_cleanup ();
 }
@@ -404,6 +405,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
+    if (t->exec_file != NULL) {
+        file_close(t->exec_file);
+        t->exec_file = NULL;
+    }
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -476,7 +481,6 @@ load (const char *file_name, struct intr_frame *if_) {
 				break;
 		}
 	}
-
 	/* Set up stack. */
 	if (!setup_stack (if_))
 		goto done;
@@ -540,7 +544,11 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+    if (file != NULL) {
+        file_deny_write(file);
+        t->exec_file = file;
+    }
+
 	return success;
 }
 
