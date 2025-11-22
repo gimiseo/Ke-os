@@ -133,6 +133,7 @@ struct thread {
 
     struct intr_frame tf_fork;
     struct semaphore sema_load;
+    struct semaphore sema_wait_parent;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

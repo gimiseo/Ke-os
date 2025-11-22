@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "threads/synch.h"
+#include "userprog/syscall.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -230,7 +231,9 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* And then load the binary */
+    lock_acquire(&filesys_lock);
 	success = load (file_name, &_if);
+    lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -266,6 +269,7 @@ process_wait (tid_t child_tid) {
         if (child->tid == child_tid) {
             sema_down(&child->sema_wait);
             list_remove(iter);
+            sema_up(&child->sema_wait_parent);
             child_exit = child->exit_num;
             return child_exit;
         }
@@ -283,6 +287,7 @@ process_exit (void) {
     file_close(curr->exec_file);
     sema_up(&curr->sema_wait);
 	process_cleanup ();
+    sema_down(&curr->sema_wait_parent);
 }
 
 /* Free the current process's resources. */

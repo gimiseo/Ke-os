@@ -12,6 +12,7 @@
 #include "filesys/filesys.h"
 #include "devices/input.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -29,6 +30,8 @@ void syscall_handler (struct intr_frame *);
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
+struct lock filesys_lock;
+
 void
 syscall_init (void) {
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
@@ -40,6 +43,7 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+    lock_init(&filesys_lock);
 }
 
 static void check_addr(char *addr) {
@@ -109,7 +113,9 @@ syscall_handler (struct intr_frame *f) {
             initial_size = f->R.rsi;
 
             check_addr(file);
+            lock_acquire(&filesys_lock);
             f->R.rax = filesys_create(file, initial_size);
+            lock_release(&filesys_lock);
             break;
 
         case SYS_REMOVE:
@@ -123,8 +129,12 @@ syscall_handler (struct intr_frame *f) {
             file = (char *)f->R.rdi;
 
             check_addr(file);
-            ASSERT(t->next_fd < MAX_FD);
+            if (t->next_fd >= MAX_FD) {
+                f->R.rax = -1;
+                break;
+            }
 
+            lock_acquire(&filesys_lock);
             struct file *file_ptr = filesys_open(file);
             if (file_ptr == NULL) {
                 f->R.rax = -1;
@@ -132,6 +142,7 @@ syscall_handler (struct intr_frame *f) {
                 f->R.rax = t->next_fd;
                 t->fd_table[t->next_fd++] = file_ptr;
             }
+            lock_release(&filesys_lock);
             break;
         
         case SYS_FILESIZE:
@@ -151,13 +162,20 @@ syscall_handler (struct intr_frame *f) {
             
             check_addr((char *)buffer);
             if (fd == 0) {
-                *buffer = input_getc();
-                f->R.rax = 1;
+                lock_acquire(&filesys_lock);
+                for (int i = 0; i < size; i++) {
+                    *buffer = input_getc();
+                    buffer++;
+                }
+                f->R.rax = size;
+                lock_release(&filesys_lock);
             } else if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
                 f->R.rax = -1;
             } else {
+                lock_acquire(&filesys_lock);
                 off_t bytes_read = file_read(t->fd_table[fd], buffer, size);
                 f->R.rax = (uint64_t)bytes_read;
+                lock_release(&filesys_lock);
             }
             break;
 
@@ -173,8 +191,10 @@ syscall_handler (struct intr_frame *f) {
             } else if (fd < 2 || fd >= MAX_FD || t->fd_table[fd] == NULL) {
                 f->R.rax = -1;
             } else {
+                lock_acquire(&filesys_lock);
                 off_t bytes_written = file_write(t->fd_table[fd], buffer, size);
                 f->R.rax = (uint64_t)bytes_written;
+                lock_release(&filesys_lock);
             }
             break;
         

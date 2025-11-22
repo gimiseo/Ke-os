@@ -628,6 +628,7 @@ init_thread (struct thread *t, const char *name, int priority) {
     t->parent_thread = NULL;
     list_init(&t->childs);
     sema_init(&t->sema_load, 0);
+    sema_init(&t->sema_wait_parent, 0);
 #endif
 }
 
