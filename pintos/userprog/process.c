@@ -314,13 +314,14 @@ process_exit (void) {
 			file_close(curr->file_descrs[i]);
 			curr->file_descrs[i] = NULL;
 	}
-	while (!list_empty(&curr->childs)) {
-        struct list_elem *e = list_begin(&curr->childs);
-        struct thread *child = list_entry(e, struct thread, child_elem);
+	// while (!list_empty(&curr->childs)) {
+    //     struct list_elem *e = list_begin(&curr->childs);
+    //     struct thread *child = list_entry(e, struct thread, child_elem);
         
-        list_remove(e);
-        sema_up(&child->waiting_parents);
-    }
+    //     list_remove(e);
+    //     sema_up(&child->waiting_parents);
+    // }
+	//
 	file_close(curr->exec_file);
 	sema_up(&curr->wait);
 
