@@ -107,7 +107,6 @@ process_fork (const char *name, struct intr_frame *if_) {
 			break;
 		}
     }
-
     return tid;
 }
 
@@ -173,17 +172,21 @@ __do_fork (void *aux) {
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
+	if (current->pml4 == NULL) {
+        if_.R.rax = -1;
 		goto error;
-
+    }
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
 		goto error;
 #else
-	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
-		goto error;
+	if (!pml4_for_each (parent->pml4, duplicate_pte, parent)) {
+        if_.R.rax = -1;
+        goto error;
+    }
+
 #endif
 
 	/* TODO: Your code goes here.
@@ -200,7 +203,6 @@ __do_fork (void *aux) {
 		current->fd_table[i] = file;
 	}
 	current->next_fd = parent->next_fd;
-    current->exec_file = file_duplicate(parent->exec_file);
 
 	sema_up(&current->sema_load);
 	process_init ();
@@ -209,6 +211,8 @@ __do_fork (void *aux) {
 	if (succ)
 		do_iret (&if_);
 error:
+	sema_up(&current->sema_load);
+    current->exit_num = -1;
 	thread_exit ();
 }
 
@@ -237,8 +241,9 @@ process_exec (void *f_name) {
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
-	if (!success)
-		return -1;
+	if (!success) {
+        return -1;
+    }
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -281,13 +286,35 @@ process_wait (tid_t child_tid) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-    if (curr->pml4) {
-	    printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+    if (curr->pml4 == NULL) {
+	    return;
     }
+
+    printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+
+    for (int i = 2; i < MAX_FD; i++) {
+        if (curr->fd_table[i] != NULL) {
+            file_close(curr->fd_table[i]);
+            curr->fd_table[i] = NULL;
+        }
+    }
+
+    while (!list_empty(&curr->childs)) {
+        struct list_elem *e = list_begin(&curr->childs);
+        struct thread *child = list_entry(e, struct thread, child_elem);
+        
+        list_remove(e);
+        sema_up(&child->sema_wait_parent);
+    }
+
     file_close(curr->exec_file);
     sema_up(&curr->sema_wait);
-	process_cleanup ();
-    sema_down(&curr->sema_wait_parent);
+	
+    if (curr->parent_thread != NULL) {
+        sema_down(&curr->sema_wait_parent);
+    }
+
+    process_cleanup();
 }
 
 /* Free the current process's resources. */
@@ -410,10 +437,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
-    if (t->exec_file != NULL) {
-        file_close(t->exec_file);
-        t->exec_file = NULL;
-    }
 
 	/* Open executable file. */
 	file = filesys_open (file_name);

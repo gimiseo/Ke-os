@@ -88,19 +88,19 @@ syscall_handler (struct intr_frame *f) {
             cmd_line = (char *)f->R.rdi;
             
             check_addr(cmd_line);
-            char *fn_copy;
-            fn_copy = palloc_get_page(0);
+            char *fn_copy = palloc_get_page(0);
             if (fn_copy == NULL) {
                 thread_current()->exit_num = -1;
                 thread_exit();
-            } else {
-                strlcpy(fn_copy, cmd_line, PGSIZE);
-                if (process_exec(fn_copy) == -1) {
-                    thread_current()->exit_num = -1;
-                    thread_exit();
-                }
             }
 
+            strlcpy(fn_copy, cmd_line, PGSIZE);
+            if (process_exec(fn_copy) == -1) {
+                thread_current()->exit_num = -1;
+                thread_exit();
+            }
+        
+            NOT_REACHED();
             break;
         
         case SYS_WAIT:
