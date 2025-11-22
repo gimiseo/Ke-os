@@ -625,8 +625,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	t->exit_num = 0;
-	t->file_descrs[0] = NULL;
-	t->file_descrs[1] = NULL;
+	// t->file_descrs[0] = NULL;
+	// t->file_descrs[1] = NULL;
+	for (int i = 0; i < FILE_MAX; i++)
+			t->file_descrs[i] = NULL;
 	t->next_num = 2;
 	list_init(&(t->childs));
 	t->parent = NULL;

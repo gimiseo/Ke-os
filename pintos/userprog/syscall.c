@@ -59,7 +59,7 @@ syscall_init (void) {
 
 static void
 user_memory_access (const void *addr){
-	if (addr == NULL || addr > KERN_BASE || 
+	if (addr == NULL || addr >= KERN_BASE || 
 		pml4_get_page(thread_current()->pml4, addr) == NULL) {
 		thread_current()->exit_num = -1;
 		thread_exit ();
@@ -81,24 +81,7 @@ create (const char *file, unsigned initial_size) {
 		
 }
 
-static int
-open (const char *file_name) {
-	struct file *file = NULL;
-	struct thread *curr = thread_current();
-	int fd;
-	user_memory_access(file_name);
-	lock_acquire(&filesys_lock);
-	file = filesys_open (file_name);
-	fd = curr->next_num;
-	if (file == NULL || fd >= FILE_MAX) {
-		lock_release(&filesys_lock);
-		return -1;
-	}
-	curr->file_descrs[fd] = file;
-	curr->next_num++;
-	lock_release(&filesys_lock);
-	return fd;
-}
+
 
 static void
 close (int fd) {
@@ -116,6 +99,31 @@ close (int fd) {
 	}
 	file_close(file);
 	curr->file_descrs[fd] = NULL;
+}
+
+
+static int
+open (const char *file_name) {
+	struct file *file = NULL;
+	struct thread *curr = thread_current();
+	int fd;
+	user_memory_access(file_name);
+	lock_acquire(&filesys_lock);
+	file = filesys_open (file_name);
+	if (file == NULL) {
+		lock_release(&filesys_lock);
+		return -1;
+	}
+	fd = curr->next_num;
+	if (fd >= FILE_MAX) {
+		file_close(file);
+		lock_release(&filesys_lock);
+		return -1;
+	}
+	curr->file_descrs[fd] = file;
+	curr->next_num++;
+	lock_release(&filesys_lock);
+	return fd;
 }
 
 static int

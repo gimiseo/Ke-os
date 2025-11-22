@@ -104,9 +104,11 @@ make_children (void) {
   int i = 0;
   int pid;
   char child_name[128];
+  //생존 msg ("still live");
   for (; ; random_init (i), i++) {
     if (i > EXPECTED_DEPTH_TO_PASS/2) {
       snprintf (child_name, sizeof child_name, "%s_%d_%s", "child", i, "X");
+      
       pid = fork(child_name);
       if (pid > 0 && wait (pid) != -1) {
         fail ("crashed child should return -1.");
@@ -142,8 +144,9 @@ main (int argc UNUSED, char *argv[] UNUSED) {
   test_name = "multi-oom";
 
   msg ("begin");
-
+  // 생존 msg ("still live");
   int first_run_depth = make_children ();
+  
   CHECK (first_run_depth >= EXPECTED_DEPTH_TO_PASS, "Spawned at least %d children.", EXPECTED_DEPTH_TO_PASS);
 
   for (int i = 0; i < EXPECTED_REPETITIONS; i++) {

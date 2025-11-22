@@ -93,6 +93,10 @@ process_fork (const char *name, struct intr_frame *if_) {
 	struct thread *child;
 	memcpy(&parent->parent_if, if_, sizeof (struct intr_frame));
 	tid_t child_tid = thread_create (name, PRI_DEFAULT, __do_fork, parent);
+	if (child_tid == TID_ERROR)
+	{
+		return TID_ERROR;
+	}
 	struct list_elem *iter;
 	for (iter = list_begin (&parent->childs);
         iter != list_end (&parent->childs);
@@ -104,10 +108,14 @@ process_fork (const char *name, struct intr_frame *if_) {
 			break;
 		}
     }
-	if (child->exit_num == TID_ERROR)
-	{
-		return TID_ERROR;
-	}
+	//error에서 exit_num -1 로 해줬으면 fork실패. 고로 sema_up해주고 list_remove
+	//sema_up안해주니까 자식 계속 살아있음;;;;
+	//자식 살아있어서 4kb 공간 계속 잡고 있으니까 134개만들고 또 만드니까 132개 밖에 못만든다고 죽음
+	if (child->exit_num == -1) {
+		sema_up(&child->waiting_parents);
+        list_remove(&child->child_elem);
+        return TID_ERROR;
+    }
 	return child_tid;
 }
 
@@ -215,6 +223,9 @@ __do_fork (void *aux) {
 	if (succ)
 		do_iret (&if_);
 error:
+	//fork 실패시 에러. -1 설정 안해줘서 1 방출
+	current->exit_num = -1;
+	sema_up(&current->load);
 	thread_exit ();
 }
 
@@ -293,16 +304,30 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	if (curr->pml4 != NULL) {
-		printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+	if (curr->pml4 == NULL) {
+		return;
 	}
-	struct file *file = curr->exec_file;
-	
-	if (curr->exec_file != NULL)
-		file_close(curr->exec_file);
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
+
+	for (int i = 0; i < FILE_MAX; i++) {
+		if (curr->file_descrs[i] != NULL)
+			file_close(curr->file_descrs[i]);
+			curr->file_descrs[i] = NULL;
+	}
+	while (!list_empty(&curr->childs)) {
+        struct list_elem *e = list_begin(&curr->childs);
+        struct thread *child = list_entry(e, struct thread, child_elem);
+        
+        list_remove(e);
+        sema_up(&child->waiting_parents);
+    }
+	file_close(curr->exec_file);
 	sema_up(&curr->wait);
+
+	if (curr->parent != NULL)
+		sema_down(&curr->waiting_parents);
 	process_cleanup ();
-	sema_down(&curr->waiting_parents);
+	
 }
 
 /* Free the current process's resources. */
