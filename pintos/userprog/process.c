@@ -234,14 +234,17 @@ process_wait (tid_t child_tid) {
 		el != list_end(&par->chd_list); 
 		el = list_next(el) )
 	{
-		struct thread *chd = list_entry(el, struct thread, chd_elem);
-		if(child_tid == chd->tid){
-			if(!chd->is_wait){
-				chd->is_wait = true;
-				list_remove(&chd->chd_elem);
-				sema_down(&chd->chd_sema);
-			} else return -1;
-			int status = chd->exit_num;
+		struct chd_struct *c_list = list_entry(el, struct chd_struct, elem);
+		if(child_tid == c_list->tid){
+			if(c_list->waited)
+				return -1;
+			c_list->waited = true;
+			list_remove(&c_list->elem);
+			sema_down(&c_list->sema);
+			int status = c_list->exit_code;
+			c_list->chd_count--;
+			if (c_list->chd_count == 0)
+				palloc_free_page(c_list);
 			return status;
 		}
 	}
@@ -252,6 +255,26 @@ process_wait (tid_t child_tid) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
+
+	/* 부모는 죽기 위해 자식 정리를 한다. */
+	struct list_elem *e = list_begin(&curr->chd_list);
+	while (e != list_end(&curr->chd_list)) {
+		struct chd_struct *c_list = list_entry(e, struct chd_struct, elem);
+		e = list_next(e);
+		list_remove(&c_list->elem);
+		c_list->chd_count--;
+		if (c_list->chd_count == 0)
+			palloc_free_page(c_list);
+	}
+	/* 자식은 죽을 때 부모에게 이 사실을 알려야 한다.  */
+	if (curr->chd_st) {
+		curr->chd_st->exit_code = curr->exit_num;
+		sema_up(&curr->chd_st->sema);
+		curr->chd_st->chd_count--;
+		if (curr->chd_st->chd_count == 0) 
+			palloc_free_page(curr->chd_st); 
+	}
+
 	if(curr->pml4 == NULL){
 		process_cleanup();
 		return;
@@ -260,12 +283,14 @@ process_exit (void) {
 		file_allow_write(curr->exe);
 		curr->exe = NULL;
 	}
-	for(int i=0; i<=curr->fd_next; ++i){
+	for(int i=0; i<curr->fd_next; ++i){
 		struct file *f = curr->fd_table[i];
-		file_close(f);
+		if (f) {
+			file_close(f);
+			curr->fd_table[i] = NULL;
+		}
 	}
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
-	sema_up(&curr->chd_sema);
 	process_cleanup ();
 }
 

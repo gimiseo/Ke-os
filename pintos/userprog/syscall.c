@@ -283,9 +283,10 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			char *file_name = f->R.rdi;
 			validate_addr(file_name);
 			lock_acquire(&lockfile);
-			filesys_remove(file_name);
+			bool suc = filesys_remove(file_name);
 			lock_release(&lockfile);
-			
+			f->R.rax = suc;
+			break;
 		}
 		
 		case SYS_SEEK : {
@@ -299,9 +300,17 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			lock_release(&lockfile);
 		}
 
-		// case SYS_TELL : {
-		// 	struct file *file = f->R.rdi;
-		// 	validate_fn(file);
-		// }
+		case SYS_TELL: {
+		    int fd = f->R.rdi;
+		    validate_fd(fd);          
+		    validate_fd_file(fd);    
+		    struct file *file = thread_current()->fd_table[fd];
+		    lock_acquire(&lockfile);   
+		    off_t pos = file_tell(file);
+		    lock_release(&lockfile);
+		    f->R.rax = pos;
+		    break;
+		}
+
 	}	
 }

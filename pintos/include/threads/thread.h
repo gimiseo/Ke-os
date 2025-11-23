@@ -14,6 +14,7 @@
 #endif
 
 
+
 /* States in a thread's life cycle. */
 enum thread_status {
 	THREAD_RUNNING,     /* Running thread. */
@@ -126,14 +127,13 @@ struct thread {
 	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 		uint64_t *pml4;                    /* Page map level 4 */
+		struct chd_struct *chd_st;   /* Shared status with parent. */
 		struct semaphore fork_sema;
 		struct semaphore chd_sema;
 
 		struct list chd_list;
-		struct list_elem chd_elem;
 
 		struct thread *par;
-		bool is_wait;
 
 		struct file *exe;
 	#endif
@@ -145,6 +145,15 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+};
+/* Child wait status shared between parent and child. */
+struct chd_struct {
+	tid_t tid;
+	int exit_code;
+	bool waited;              
+	int chd_count;            
+	struct semaphore sema;    
+	struct list_elem elem;    
 };
 
 /* If false (default), use round-robin scheduler.
