@@ -8,6 +8,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -120,12 +121,22 @@ struct thread {
 	/* progject 2 */
 	int exit_num;
 	int fd_next;
-	struct file *fd_table[32];
-
-#ifdef USERPROG
+	struct file *fd_table[128];
+	
+	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
-	uint64_t *pml4;                     /* Page map level 4 */
-#endif
+		uint64_t *pml4;                    /* Page map level 4 */
+		struct semaphore fork_sema;
+		struct semaphore chd_sema;
+
+		struct list chd_list;
+		struct list_elem chd_elem;
+
+		struct thread *par;
+		bool is_wait;
+
+		struct file *exe;
+	#endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;

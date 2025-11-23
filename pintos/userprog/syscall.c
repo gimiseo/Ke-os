@@ -18,6 +18,7 @@ void syscall_handler (struct intr_frame *);
 /* project2 */
 void validate_addr (void *addr);
 void validate_fn (char *file_name);
+struct lock lockfile;
 
 /* System call.
  *
@@ -43,6 +44,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
+	lock_init(&lockfile);
 }
 
 /* project2 */
@@ -95,6 +98,20 @@ validate_fd (int fd) {
 	}
 }
 
+void validate_ptr(void *uaddr) {
+  if (!is_user_vaddr(uaddr) || pml4_get_page(thread_current()->pml4, uaddr) == NULL) {
+    thread_current()->exit_num = -1;
+    thread_exit();
+  }
+}
+
+void validate_buf(void *uaddr, size_t size) {
+  uint8_t *p = uaddr;
+  for (size_t i = 0; i < size; i++) {
+    validate_ptr(p + i);
+  }
+}
+
 /* The main system call interface */
 void syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t rax = f->R.rax;
@@ -107,16 +124,27 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 
 			/* TD : 2 need to validate fd, buf */ 
 			struct thread *cur = thread_current();
-			/* [11.19] 검증 추가  */
 			validate_fd(fd);
 			validate_addr(buf);
 
 			if(fd == 1){
 				putbuf(buf, size);
-				f->R.rax = size;
+				if(size == 0){
+					f->R.rax = 0;
+				}else f->R.rax = size;
 			}else if(fd>=2){ // [11.19] 파일 작성 처리
 				struct file *file = cur->fd_table[fd];
+				if(file == NULL){
+					f->R.rax = -1;
+					break;
+				}
+				lock_acquire(&lockfile);
 				off_t n = file_write(file, buf, size);
+				lock_release(&lockfile);
+				if(n == 0){
+					f->R.rax = 0;
+					break;
+				}
 				f->R.rax = n;
 			}	
 			break;
@@ -128,9 +156,12 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 			
 		case SYS_EXEC : {
-			/* TD : need to validate file_name */
 			char *file_name = f->R.rdi;
-			process_exec(file_name);
+			validate_addr(file_name);
+			int stat = process_exec(file_name);
+			thread_current()->exit_num = stat;
+			f->R.rax = stat;
+			if(stat == -1) thread_exit();
 			break;
 		}
 			
@@ -141,7 +172,9 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			validate_fn(file_name);
 
 			unsigned initial_size = f->R.rsi;
+			lock_acquire(&lockfile);
 			bool suc = filesys_create(file_name, initial_size);
+			lock_release(&lockfile);
 			f->R.rax = suc;
 			break;
 		}
@@ -162,21 +195,22 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			bool is_mapped_pte = pml4_get_page(pm, file_name);
 
 			// validate mapping, fileName
-			// 개 스렉히 코드... 리펙토링 필요.....
 			if(!is_user || !is_mapped_pte){
 				curr->exit_num = -1;
 				// printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 				thread_exit();
 				break;
 			}
-			if(file_name == NULL || 
+			if(file_name == NULL ||
 			file_name[0] == '\0' || 
 			strcmp(file_name,  "no-such-file") == 0) {
 				f->R.rax = -1;
 				break;
 			}
 			// file open
+			lock_acquire(&lockfile);
 			struct file *file = filesys_open(file_name);
+			lock_release(&lockfile);
 			if(file == NULL) {
 				curr->exit_num = -1;
 				thread_exit();
@@ -195,7 +229,10 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			struct thread *cur = thread_current();
 			struct file *file = cur->fd_table[fd];
 			cur->fd_table[fd] = NULL;
+			lock_acquire(&lockfile);
+			file_allow_write(file);
 			file_close(file);
+			lock_release(&lockfile);
 			break;
 		}
 
@@ -215,7 +252,9 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			} else if(fd >= 2){
 				struct thread *cur = thread_current();
 				struct file *file = cur->fd_table[fd];
+				lock_acquire(&lockfile);
 				off_t n = file_read(file, buffer, sz);
+				lock_release(&lockfile);
 				f->R.rax = n;
 			}
 			break;
@@ -239,5 +278,30 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = tid;
 			break;
 		}
+
+		case SYS_REMOVE : {
+			char *file_name = f->R.rdi;
+			validate_addr(file_name);
+			lock_acquire(&lockfile);
+			filesys_remove(file_name);
+			lock_release(&lockfile);
+			
+		}
+		
+		case SYS_SEEK : {
+			int fd = f->R.rdi;
+			unsigned pos = f->R.rsi;
+			validate_fd(fd);
+			validate_fd_file(fd);
+			struct file *file = thread_current()->fd_table[fd];
+			lock_acquire(&lockfile);
+			file_seek(file, pos);
+			lock_release(&lockfile);
+		}
+
+		// case SYS_TELL : {
+		// 	struct file *file = f->R.rdi;
+		// 	validate_fn(file);
+		// }
 	}	
 }

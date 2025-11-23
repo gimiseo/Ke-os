@@ -229,9 +229,11 @@ thread_create (const char *name, int priority,
 	t->tf.eflags = FLAG_IF;
 
 	/* Add to run queue. */
-	
+	struct thread *par = thread_current();
+	t->par = par;
+	list_push_back(&par->chd_list, &t->chd_elem);
 
-	thread_unblock (t);
+	thread_unblock (t);	
 	thread_preempted();
 	return tid;
 }
@@ -621,8 +623,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->fd_next = 2;
 
 	//project 2 fork
-	sema_init(&t->fork_wait, 0);
-	list_init(&t->wait_list);
+	sema_init(&t->fork_sema, 0);
+	sema_init(&t->chd_sema, 0);
+	list_init(&t->chd_list);
+	t->par = NULL;
+	t->is_wait = false;
+	t->exe = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
