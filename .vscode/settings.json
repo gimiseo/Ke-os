@@ -17,6 +17,11 @@
         "mmu.h": "c",
         "synch.h": "c",
         "interrupt.h": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "fixed-point.h": "c",
+        "stdio.h": "c",
+        "console.h": "c",
+        "pte.h": "c",
+        "malloc.h": "c"
     }
 }

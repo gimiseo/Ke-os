@@ -12,6 +12,7 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
+#include "threads/init.h"
 
 //true, flase define
 #define TRUE 1
@@ -97,7 +98,8 @@ close (int fd) {
 		thread_current()->exit_num = -1;
 		thread_exit ();
 	}
-	file_close(file);
+	if (file != stdin_f && file != stdout_f)
+		file_close(file);
 	curr->file_descrs[fd] = NULL;
 }
 
@@ -132,10 +134,17 @@ read (int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
 	user_memory_access(buffer);
 	int read_byte;
-	if (fd < 0 || fd >= FILE_MAX || fd == 1)
+	if (fd < 0 || fd >= FILE_MAX)
 		return -1;
-	
-	if (fd == 0) {
+	file = curr->file_descrs[fd];
+	if (file == NULL)
+	{
+		thread_current()->exit_num = -1;
+		thread_exit ();
+	}
+	if (file == stdout_f)
+		return -1;
+	if (file == stdin_f) {
 		char *ptr = (char *)buffer;
 		lock_acquire(&filesys_lock);
 		for (int i = 0; i < size; i++)
@@ -145,12 +154,6 @@ read (int fd, void *buffer, unsigned size) {
 		}
 		lock_release(&filesys_lock);
 		return read_byte;
-	}
-	file = curr->file_descrs[fd];
-	if (file == NULL)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
 	}
 	lock_acquire(&filesys_lock);
 	read_byte = file_read (file, buffer, size);
@@ -164,20 +167,21 @@ write (int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
 	user_memory_access(buffer);
 	int read_byte;
-	if (fd < 0 || fd >= FILE_MAX || fd == 0)
+	if (fd < 0 || fd >= FILE_MAX)
 		return -1;
-	if (fd == 1)
-	{
-		char f_buffer[size+1];
-		strlcpy(f_buffer, (char *)buffer, size + 1);
-		putbuf(f_buffer, size);
-		return size;
-	}
 	file = curr->file_descrs[fd];
 	if (file == NULL)
 	{
 		thread_current()->exit_num = -1;
 		thread_exit ();
+	}
+	if (file == stdin_f)
+		return -1;
+	if (file == stdout_f) {
+		char f_buffer[size+1];
+		strlcpy(f_buffer, (char *)buffer, size + 1);
+		putbuf(f_buffer, size);
+		return size;
 	}
 	lock_acquire(&filesys_lock);
 	read_byte = file_write (file, buffer, size);
@@ -211,7 +215,7 @@ exec (const char *cmd_line) {
 static void
 seek (int fd, off_t new_pos) {
 	struct file * file = thread_current()->file_descrs[fd];
-	if (fd < 2 || fd >= FILE_MAX || file == NULL) {
+	if (fd < 0 || fd >= FILE_MAX || file == NULL) {
 		return;
 	}
 	else
@@ -229,6 +233,23 @@ remove(const char *file)
 {
 	user_memory_access(file);
 	return filesys_remove(file);
+}
+
+static int
+dup2 (int oldfd, int newfd) {
+	struct file *dup_file;
+	if (oldfd < 0 || oldfd >= FILE_MAX)
+		return -1;
+	struct file *oldfile = thread_current()->file_descrs[oldfd];
+	struct file *newfile = thread_current()->file_descrs[newfd];
+	if (oldfile == NULL)
+		return -1;
+	if (oldfile->inode == newfile->inode)
+		return newfd;
+	dup_file = file_duplicate(oldfile);
+	close(newfd);
+	thread_current()->file_descrs[newfd] = dup_file;
+	return newfd;
 }
 
 /* The main system call interface */
@@ -288,6 +309,9 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_WRITE:
 			f->R.rax = write(f->R.rdi,f->R.rsi, f->R.rdx);
+			break;
+		case SYS_DUP2:
+			f->R.rax = dup2(f->R.rdi,f->R.rsi);
 			break;
 	}
 }

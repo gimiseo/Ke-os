@@ -12,6 +12,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "fixed-point.h"
+#include "threads/init.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -221,6 +222,8 @@ thread_create (const char *name, int priority,
 	struct thread *parent = thread_current();
 	t->parent = parent;
 	list_push_front(&(parent->childs), &(t->child_elem));
+	t->file_descrs[0] = stdin_f;
+	t->file_descrs[1] = stdout_f;
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -625,9 +628,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	t->exit_num = 0;
-	// t->file_descrs[0] = NULL;
-	// t->file_descrs[1] = NULL;
-	for (int i = 0; i < FILE_MAX; i++)
+	for (int i = 2; i < FILE_MAX; i++)
 			t->file_descrs[i] = NULL;
 	t->next_num = 2;
 	list_init(&(t->childs));

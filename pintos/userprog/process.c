@@ -209,7 +209,7 @@ __do_fork (void *aux) {
 		struct file *file = parent->file_descrs[i];
 		if (file == NULL)
 			continue;
-		if (i >= 2)
+		if (file != stdin_f && file != stdout_f)
 			file = file_duplicate(file);
 		current->file_descrs[i] = file;
 	}
@@ -309,7 +309,7 @@ process_exit (void) {
 	}
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 
-	for (int i = 0; i < FILE_MAX; i++) {
+	for (int i = 2; i < FILE_MAX; i++) {
 		if (curr->file_descrs[i] != NULL)
 			file_close(curr->file_descrs[i]);
 			curr->file_descrs[i] = NULL;
