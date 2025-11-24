@@ -620,9 +620,17 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->recent_cpu = RECENT_CPU_DEFAULT;
 #ifdef USERPROG
     t->exit_num = 0;
-    t->fd_table[0] = NULL; // STDIN
-    t->fd_table[1] = NULL; // STDOUT
-    t->next_fd = 2;
+    for (int i = 0; i < MAX_FILE; i++) {
+        t->fd_table[i].fd = NULL_FD;
+        t->fd_table[i].file = NULL;
+        t->fd_status[i] = false;
+    }
+    t->fd_table[STDIN].fd = STDIN;
+    t->fd_table[STDIN].file = NULL;
+    t->fd_table[STDOUT].fd = STDOUT;
+    t->fd_table[STDOUT].file = NULL;
+    t->fd_status[STDIN] = true;
+    t->fd_status[STDOUT] = true;
 
     sema_init(&t->sema_wait, 0);
     t->parent_thread = NULL;

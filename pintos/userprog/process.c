@@ -104,6 +104,11 @@ process_fork (const char *name, struct intr_frame *if_) {
         if (child->tid == tid)
 		{
 			sema_down(&child->sema_load);
+            if (child->exit_num == -1) {
+                list_remove(&child->child_elem);
+                sema_up(&child->sema_wait_parent);
+                return TID_ERROR;
+            }
 			break;
 		}
     }
@@ -194,15 +199,27 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-    for (int i = 0; i < MAX_FD; i++) {
-		struct file *file = parent->fd_table[i];
-		if (file == NULL)
-			continue;
-		if (i >= 2)
-			file = file_duplicate(file);
-		current->fd_table[i] = file;
+    for (int i = 0; i < MAX_FILE; i++) {
+        if (parent->fd_table[i].fd == NULL_FD) {
+            current->fd_table[i].fd = NULL_FD;
+            current->fd_table[i].file = NULL;
+            continue;
+        }
+        if (parent->fd_table[i].fd == STDIN) {
+            current->fd_table[i].fd = STDIN;
+            current->fd_table[i].file = NULL;
+        } else if (parent->fd_table[i].fd == STDOUT) {
+            current->fd_table[i].fd = STDOUT;
+            current->fd_table[i].file = NULL;
+        } else {
+            current->fd_table[i].fd = parent->fd_table[i].fd;
+            current->fd_table[i].file = file_duplicate(parent->fd_table[i].file);
+        }
 	}
-	current->next_fd = parent->next_fd;
+
+    for (int i = 0; i < MAX_FILE; i++) {
+        current->fd_status[i] = parent->fd_status[i];
+    }
 
 	sema_up(&current->sema_load);
 	process_init ();
@@ -292,10 +309,10 @@ process_exit (void) {
 
     printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 
-    for (int i = 2; i < MAX_FD; i++) {
-        if (curr->fd_table[i] != NULL) {
-            file_close(curr->fd_table[i]);
-            curr->fd_table[i] = NULL;
+    for (int i = 0; i < MAX_FILE; i++) {
+        if (curr->fd_table[i].file != NULL) {
+            file_close(curr->fd_table[i].file);
+            curr->fd_table[i].file = NULL;
         }
     }
 

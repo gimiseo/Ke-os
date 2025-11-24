@@ -36,7 +36,16 @@ typedef int tid_t;
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
 
-#define MAX_FD 128
+#define MAX_FILE 64
+
+#define NULL_FD -1
+#define STDIN  0
+#define STDOUT 1
+
+struct file_obj {
+    int fd;
+    struct file *file;
+};
 
 /* A kernel thread or user process.
  *
@@ -123,8 +132,8 @@ struct thread {
 	uint64_t *pml4;                     /* Page map level 4 */
     int exit_num;
     struct file *exec_file;
-    struct file *fd_table[MAX_FD];
-    int next_fd;
+    struct file_obj fd_table[MAX_FILE];
+    bool fd_status[MAX_FILE];
 
     struct semaphore sema_wait;
     struct thread *parent_thread;
