@@ -626,9 +626,9 @@ init_thread (struct thread *t, const char *name, int priority) {
         t->fd_status[i] = false;
     }
     t->fd_table[STDIN].fd = STDIN;
-    t->fd_table[STDIN].file = NULL;
+    t->fd_table[STDIN].file = STDIN_FILE;
     t->fd_table[STDOUT].fd = STDOUT;
-    t->fd_table[STDOUT].file = NULL;
+    t->fd_table[STDOUT].file = STDOUT_FILE;
     t->fd_status[STDIN] = true;
     t->fd_status[STDOUT] = true;
 

@@ -41,6 +41,8 @@ typedef int tid_t;
 #define NULL_FD -1
 #define STDIN  0
 #define STDOUT 1
+#define STDIN_FILE 1
+#define STDOUT_FILE 2
 
 struct file_obj {
     int fd;

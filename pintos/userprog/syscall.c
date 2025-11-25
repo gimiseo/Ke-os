@@ -141,7 +141,7 @@ syscall_handler (struct intr_frame *f) {
             }
 
             free_fd = -1;
-            for (int i = 2; i < MAX_FILE && free_fd == -1; i++) {
+            for (int i = 0; i < MAX_FILE && free_fd == -1; i++) {
                 if (!t->fd_status[i]) {
                     free_fd = i;
                 }
@@ -182,7 +182,7 @@ syscall_handler (struct intr_frame *f) {
 
             if (idx == -1) {
                 f->R.rax = -1;
-            } else if (t->fd_table[idx].file == NULL) {
+            } else if (t->fd_table[idx].file <= STDOUT_FILE) {
                 f->R.rax = -1;
             } else {
                 f->R.rax = (uint64_t)file_length(t->fd_table[idx].file);
@@ -207,9 +207,9 @@ syscall_handler (struct intr_frame *f) {
                 }
             }
 
-            if (idx == -1 || t->fd_table[idx].fd == STDOUT) {
+            if (idx == -1 || t->fd_table[idx].file == STDOUT_FILE) {
                 f->R.rax = -1;
-            } else if (t->fd_table[idx].fd == STDIN) {
+            } else if (t->fd_table[idx].file == STDIN_FILE) {
                 lock_acquire(&filesys_lock);
                 for (int i = 0; i < size; i++) {
                     *buffer = input_getc();
@@ -243,9 +243,9 @@ syscall_handler (struct intr_frame *f) {
                 }
             }
             
-            if (idx == -1 || t->fd_table[idx].fd == STDIN) {
+            if (idx == -1 || t->fd_table[idx].file == STDIN_FILE) {
                 f->R.rax = -1;
-            } else if (t->fd_table[idx].fd == STDOUT) {
+            } else if (t->fd_table[idx].file == STDOUT_FILE) {
                 putbuf((char *)buffer, size);
                 f->R.rax = size;
             } else {
@@ -271,7 +271,7 @@ syscall_handler (struct intr_frame *f) {
                 }
             }
 
-            if (idx == -1 || t->fd_table[idx].file == NULL) {
+            if (idx == -1 || t->fd_table[idx].file <= STDOUT_FILE) {
                 ;
             } else {
                 file_seek(t->fd_table[idx].file, position);
@@ -293,7 +293,7 @@ syscall_handler (struct intr_frame *f) {
                 }
             }
 
-            if (idx == -1 || t->fd_table[idx].file == NULL) {
+            if (idx == -1 || t->fd_table[idx].file <= STDOUT_FILE) {
                 f->R.rax = 0;
             } else {
                 f->R.rax = file_tell(t->fd_table[idx].file);
@@ -318,15 +318,26 @@ syscall_handler (struct intr_frame *f) {
                 break;
             }
 
-            fd = t->fd_table[idx].fd;
             file = t->fd_table[idx].file;
-            if (file != NULL) {
-                file_close(file);
-                t->fd_table[idx].file = NULL;
-                if (0 <= fd && fd < MAX_FILE) {
-                    t->fd_status[fd] = false;
+            t->fd_table[idx].fd = NULL_FD;
+            t->fd_table[idx].file = NULL;
+            if (fd >= 0 && fd < MAX_FILE) {
+                t->fd_status[fd] = false;
+            }
+
+            if (file <= STDOUT_FILE) {
+                break;
+            }
+
+            bool is_close = true;
+            for (int i = 0; i < MAX_FILE; i++) {
+                if (t->fd_table[i].file == file) {
+                    is_close = false;
+                    break;
                 }
-                t->fd_table[idx].fd = NULL_FD;
+            }
+            if (is_close) {
+                file_close(file);
             }
 
             break;
@@ -336,32 +347,62 @@ syscall_handler (struct intr_frame *f) {
             oldfd = f->R.rdi;
             newfd = f->R.rsi;
 
-            // if (oldfd < 0 || newfd < 0) {
-            //     break;
-            // }
+            if (oldfd < 0 || newfd < 0) {
+                f->R.rax = -1;
+                break;
+            }
 
-            // idx = -1;
-            // for (int i = 0; i < MAX_FILE && idx == -1; i++) {
-            //     if (t->fd_table[i].fd == oldfd) {
-            //         idx = i;
-            //     }
-            // }
+            int old_idx = -1;
+            for (int i = 0; i < MAX_FILE && old_idx == -1; i++) {
+                if (t->fd_table[i].fd == oldfd) {
+                    old_idx = i;
+                }
+            }
 
+            int new_idx = -1;
+            for (int i = 0; i < MAX_FILE && new_idx == -1; i++) {
+                if (t->fd_table[i].fd == newfd) {
+                    new_idx = i;
+                }
+            }
 
+            free_fd = -1;
+            for (int i = 0; i < MAX_FILE && free_fd == -1; i++) {
+                if (t->fd_table[i].fd == NULL_FD) {
+                    free_fd = i;
+                }
+            }
 
-            // if (idx == -1 || t->fd_table[oldfd].file == NULL) {
-            //     f->R.rax = -1;
-            // } else if (newfd < 0 || newfd >= MAX_FD) {
-            //     f->R.rax = -1;
-            // } else if (oldfd == newfd) {
-            //     f->R.rax = newfd;
-            // } else {
-            //     if (t->fd_table[newfd] != NULL_FILE) {
-            //         file_close(t->fd_table[newfd]);
-            //     }
-            //     t->fd_table[newfd] = file_duplicate(t->fd_table[oldfd]);
-            //     f->R.rax = newfd;
-            // }
+            if (old_idx == -1) {
+                f->R.rax = -1;
+            } else if (oldfd == newfd) {
+                f->R.rax = newfd;
+            } else if (new_idx == -1) {
+                t->fd_table[free_fd].fd = newfd;
+                t->fd_table[free_fd].file = t->fd_table[old_idx].file;
+                t->fd_status[free_fd] = true;
+                f->R.rax = newfd;
+            } else {
+                if (t->fd_table[new_idx].file > STDOUT_FILE) {
+                    file = t->fd_table[new_idx].file;
+                    t->fd_table[new_idx].file = NULL;
+
+                    bool is_close = true;
+
+                    for (int i = 0; i < MAX_FILE; i++) {
+                        if (t->fd_table[i].file == file) {
+                            is_close = false;
+                            break;
+                        }
+                    }
+
+                    if (is_close) {
+                        file_close(file);
+                    }
+                }
+                t->fd_table[new_idx].file = t->fd_table[old_idx].file;
+                f->R.rax = newfd;
+            }
             break;
     }
 }

@@ -200,17 +200,15 @@ __do_fork (void *aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
     for (int i = 0; i < MAX_FILE; i++) {
-        if (parent->fd_table[i].fd == NULL_FD) {
+        if (parent->fd_table[i].file == NULL) {
             current->fd_table[i].fd = NULL_FD;
             current->fd_table[i].file = NULL;
-            continue;
-        }
-        if (parent->fd_table[i].fd == STDIN) {
-            current->fd_table[i].fd = STDIN;
-            current->fd_table[i].file = NULL;
-        } else if (parent->fd_table[i].fd == STDOUT) {
-            current->fd_table[i].fd = STDOUT;
-            current->fd_table[i].file = NULL;
+        } else if (parent->fd_table[i].file == STDIN_FILE) {
+            current->fd_table[i].fd = parent->fd_table[i].fd;
+            current->fd_table[i].file = STDIN_FILE;
+        } else if (parent->fd_table[i].file == STDOUT_FILE) {
+            current->fd_table[i].fd = parent->fd_table[i].fd;
+            current->fd_table[i].file = STDOUT_FILE;
         } else {
             current->fd_table[i].fd = parent->fd_table[i].fd;
             current->fd_table[i].file = file_duplicate(parent->fd_table[i].file);
@@ -303,6 +301,7 @@ process_wait (tid_t child_tid) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
+    struct file *file;
     if (curr->pml4 == NULL) {
 	    return;
     }
@@ -310,9 +309,19 @@ process_exit (void) {
     printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 
     for (int i = 0; i < MAX_FILE; i++) {
-        if (curr->fd_table[i].file != NULL) {
-            file_close(curr->fd_table[i].file);
+        if (curr->fd_table[i].file > STDOUT_FILE) {
+            file = curr->fd_table[i].file;
             curr->fd_table[i].file = NULL;
+            bool is_close = true;
+            for (int i = 0; i < MAX_FILE; i++) {
+                if (curr->fd_table[i].file == file) {
+                    is_close = false;
+                    break;
+                }
+            }
+            if (is_close) {
+                file_close(file);
+            }
         }
     }
 
