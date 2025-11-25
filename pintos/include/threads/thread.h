@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -124,15 +125,14 @@ struct thread {
 	uint64_t *pml4;                     /* Page map level 4 */
 	/*project 2 추가*/
 	int exit_num;
-	struct list file_descrs;			/*동적으로 한다했지 동적할당을 한다곤 안함*/
-	int file_num;						/*파일 128넘어가면 죽음*/
+	struct list descrs_t;			/*동적으로 한다했지 동적할당을 한다곤 안함*/
 	struct intr_frame parent_if;
 	struct thread *parent;				/*아부지*/
 	struct list childs;					/*자식 리스트*/
 	struct list_elem child_elem;		/*자식 될수도*/
 	struct semaphore wait;				/*wait용 세마*/
 	struct semaphore load;				/*자식 로드 세마*/
-	struct semaphore waiting_parents;	/*부모보다 늦게 죽기*/
+	struct semaphore waiting_parents;	/*부모보다 일찍 죽기*/
 	struct file *exec_file;				/*열어놔라*/
 #endif
 #ifdef VM

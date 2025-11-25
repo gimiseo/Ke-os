@@ -23,6 +23,7 @@ void syscall_handler (struct intr_frame *);
 
 struct lock filesys_lock;
 
+
 // int write (int fd, const void *buffer, unsigned size)
 // {
 // 	char f_buffer[size+1];
@@ -62,9 +63,9 @@ static bool
 cmp_fd_less (const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux UNUSED) {
-	struct file *fa = list_entry (a, struct file, file_elem);
-    struct file *fb = list_entry (b, struct file, file_elem);
-	return fa->fd < fb->fd;
+	struct descriptor *fd_a = list_entry (a, struct descriptor, desc_elem);
+    struct descriptor *fd_b = list_entry (b, struct descriptor, desc_elem);
+	return fd_a->fd < fd_b->fd;
 }
 
 //open fd 결정해주는 함수
@@ -73,39 +74,44 @@ find_pos_fd_num (struct thread * curr) {
 	struct list_elem *iter;
 	int prev_num = 1;
 	//file_max 넘어가면 끝
-	if (curr->file_num >= FILE_MAX)
+	if (list_size(&(curr->descrs_t)) >= FILE_MAX)
 		return -1;
-	if (list_empty(&curr->file_descrs)) {\
+	if (list_empty(&curr->descrs_t)) {
 		return 2;
 	}
-	for (iter = list_begin (&curr->file_descrs);
-        iter != list_end (&curr->file_descrs);
+	for (iter = list_begin (&(curr->descrs_t));
+        iter != list_end (&(curr->descrs_t));
         iter = list_next (iter)) {
-		struct file *file = list_entry (iter, struct file, file_elem);
-		if (file->fd - prev_num > 1)
+		struct descriptor *descript = list_entry (iter, struct descriptor, desc_elem);
+		if (descript->fd - prev_num > 1)
 		{
 			return prev_num + 1;
 		}
-		prev_num = file->fd;
+		prev_num = descript->fd;
     }
 	return prev_num + 1;
 }
 
-static int
+int
 fd_to_file_for_remove(struct thread * curr, int fd) {
 	struct list_elem *iter;
-	if (list_empty(&curr->file_descrs)) {
+	if (list_empty(&(curr->descrs_t))) {
 		return NULL;
 	}
-	for (iter = list_begin (&curr->file_descrs);
-        iter != list_end (&curr->file_descrs);
+	for (iter = list_begin (&(curr->descrs_t));
+        iter != list_end (&(curr->descrs_t));
         iter = list_next (iter)) {
-		struct file *file = list_entry (iter, struct file, file_elem);
-		if (file->fd == fd)
+		struct descriptor *descript = list_entry (iter, struct descriptor, desc_elem);
+		if (descript->fd == fd)
 		{
-			curr->file_num--;
 			list_remove(iter);
-			file_close(file);
+			//여기 주의
+			if (descript->file != stdin_f && descript->file != stdout_f) {
+				descript->file->refcnt--;
+				if (descript->file->refcnt < 1)
+					file_close(descript->file);
+			}
+			free(descript);
 			return true;
 		}
     }
@@ -115,16 +121,16 @@ fd_to_file_for_remove(struct thread * curr, int fd) {
 struct file *
 fd_to_file_for_find(struct thread * curr, int fd) {
 	struct list_elem *iter;
-	if (list_empty(&curr->file_descrs)) {
+	if (list_empty(&(curr->descrs_t))) {
 		return NULL;
 	}
-	for (iter = list_begin (&curr->file_descrs);
-        iter != list_end (&curr->file_descrs);
+	for (iter = list_begin (&(curr->descrs_t));
+        iter != list_end (&(curr->descrs_t));
         iter = list_next (iter)) {
-		struct file *file = list_entry (iter, struct file, file_elem);
-		if (file->fd == fd)
+		struct descriptor *descript = list_entry (iter, struct descriptor, desc_elem);
+		if (descript->fd == fd)
 		{
-			return file;
+			return descript->file;
 		}
     }
 	return NULL;
@@ -181,8 +187,15 @@ open (const char *file_name) {
 		lock_release(&filesys_lock);
 		return -1;
 	}
-	file->fd = fd;
-	list_insert_ordered(&(curr->file_descrs), &(file->file_elem), cmp_fd_less, NULL);
+	struct descriptor *descript = calloc(1, sizeof(struct descriptor));
+	if (descript == NULL) {
+		file_close(file);
+		return -1;
+	}
+	descript->fd = fd;
+	descript->file = file;
+	descript->file->refcnt++;
+	list_insert_ordered(&(curr->descrs_t), &(descript->desc_elem), cmp_fd_less, NULL);
 	lock_release(&filesys_lock);
 	return fd;
 }
@@ -196,21 +209,22 @@ read (int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
 	struct file *file = fd_to_file_for_find(curr, fd);
 
-	//리스트에 있으면 무조건 파일임 dup2된거라고 기정사실화
-	if (file != NULL) {
+	if (file == NULL)
+		return -1;
+	if (file != stdin_f && file != stdout_f) {
 		lock_acquire(&filesys_lock);
 		int bytes = file_read (file, buffer, size);
 		lock_release(&filesys_lock);
 		return bytes;
 	}
-
-	//리스트에 없는데 fd가 0? -> 표준이 살아있는거임
-	if (fd == 0) {
+	if (file == stdin_f) {
 		char *ptr = (char *)buffer;
+		int bytes = 0;
 		for (int i = 0; i < size; i++){
 			*ptr++ = input_getc();
+			bytes++;
 		}
-		return size;
+		return bytes;
 	}
 	return -1;
 }
@@ -223,8 +237,9 @@ write (int fd, void *buffer, unsigned size) {
     struct thread *curr = thread_current();
     struct file *file = fd_to_file_for_find(curr, fd);
 
-    if (file != NULL) {
-		// 쓰기 방지된 파일 체크
+	if (file == NULL)
+		return -1;
+	if (file != stdin_f && file != stdout_f) {
         if (file->deny_write) 
 			return 0; 
         lock_acquire(&filesys_lock);
@@ -233,8 +248,7 @@ write (int fd, void *buffer, unsigned size) {
         return bytes;
     }
 
-    // 리스트에 없는데 fd가 1번이면 기본 출력
-    if (fd == 1) {
+    if (file == stdout_f) {
         putbuf(buffer, size);
         return size;
     }
@@ -263,7 +277,7 @@ exec (const char *cmd_line) {
 static void
 seek (int fd, off_t new_pos) {
 	struct file * file = fd_to_file_for_find(thread_current(), fd);
-	if (fd < 0 || fd >= FILE_MAX || file == NULL) {
+	if (fd < 0 || file == NULL || file == stdin_f || file == stdout_f) {
 		return;
 	}
 	else
@@ -297,12 +311,27 @@ dup2 (int oldfd, int newfd) {
 	if (target_file != NULL) {
 		fd_to_file_for_remove (curr, newfd);
 	}
-	struct file *newfile = file_duplicate(oldfile);
-	if (newfile == NULL)
+	struct descriptor *new_descript = calloc(1, sizeof(struct descriptor));
+	if (new_descript  == NULL) {
 		return -1;
-	newfile->fd = newfd;
-	list_insert_ordered(&(curr->file_descrs), &(newfile->file_elem), cmp_fd_less, NULL);;
+	}
+	new_descript->fd = newfd;
+	new_descript->file = oldfile;
+	new_descript->file->refcnt++;
+	list_insert_ordered(&(curr->descrs_t), &(new_descript->desc_elem), cmp_fd_less, NULL);
 	return newfd;
+}
+
+static unsigned int
+tell(int fd) {
+	struct thread * curr = thread_current();
+	if (fd < 0) {
+		return;
+	}
+	struct file *file = fd_to_file_for_find(curr, fd);
+	if (file != stdin_f && file != stdout_f)
+		return (file->pos);
+	return -1;
 }
 
 /* The main system call interface */
@@ -367,5 +396,10 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_DUP2:
 			f->R.rax = dup2(f->R.rdi,f->R.rsi);
 			break;
+		case SYS_TELL:
+			f->R.rax = tell(f->R.rdi);
+			break;
+		default:
+			NOT_REACHED();
 	}
 }

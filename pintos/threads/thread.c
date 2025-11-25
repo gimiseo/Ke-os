@@ -219,6 +219,25 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	//하....,,,,,....
+	struct descriptor *stdin_descript = calloc(1, sizeof(struct descriptor));
+	if (stdin_descript  == NULL) {
+		return -1;
+	}
+	stdin_descript->fd = 0;
+	stdin_descript->file = stdin_f;
+	stdin_descript->file;
+	list_push_back(&(t->descrs_t), &(stdin_descript->desc_elem));
+	
+	struct descriptor *stdout_descript = calloc(1, sizeof(struct descriptor));
+	if (stdout_descript  == NULL) {
+		return -1;
+	}
+	stdout_descript->fd = 1;
+	stdout_descript->file = stdout_f;
+	stdout_descript->file;
+	list_push_back(&(t->descrs_t), &(stdout_descript->desc_elem));
+
 	//thread
 	struct thread *parent = thread_current();
 	t->parent = parent;
@@ -626,9 +645,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	t->exit_num = 0;
-	list_init(&(t->file_descrs));
-	t->file_num = 2;
-	
+	list_init(&(t->descrs_t));
 	list_init(&(t->childs));
 	t->parent = NULL;
 	sema_init(&t->wait, 0);

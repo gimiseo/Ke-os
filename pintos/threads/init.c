@@ -101,6 +101,10 @@ main (void) {
 #ifdef USERPROG
 	exception_init ();
 	syscall_init ();
+	stdin_f = (struct file *)calloc(1, sizeof(struct file));
+	stdin_f->refcnt = 100;
+	stdout_f = (struct file *)calloc(1, sizeof(struct file));
+	stdout_f->refcnt = 100;
 #endif
 	/* Start thread scheduler and enable interrupts. */
 	thread_start ();
@@ -124,6 +128,8 @@ main (void) {
 	/* Finish up. */
 	if (power_off_when_done)
 		power_off ();
+	free(stdin_f);
+	free(stdout_f);
 	thread_exit ();
 }
 

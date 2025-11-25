@@ -20,6 +20,7 @@
 #include "intrinsic.h"
 #include "threads/synch.h"
 #include "userprog/syscall.h"
+#include "threads/malloc.h"
 
 #ifdef VM
 #include "vm/vm.h"
@@ -35,9 +36,9 @@ static bool
 cmp_fd_less (const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux UNUSED) {
-	struct file *fa = list_entry (a, struct file, file_elem);
-    struct file *fb = list_entry (b, struct file, file_elem);
-	return fa->fd < fb->fd;
+	struct descriptor *fd_a = list_entry (a, struct descriptor, desc_elem);
+    struct descriptor *fd_b = list_entry (b, struct descriptor, desc_elem);
+	return fd_a->fd < fd_b->fd;
 }
 
 /* General process initializer for initd and other process. */
@@ -219,20 +220,29 @@ __do_fork (void *aux) {
 	// 		file = file_duplicate(file);
 	// 	current->file_descrs[i] = file;
 	// }
+	fd_to_file_for_remove(current, 0);
+	fd_to_file_for_remove(current, 1);
 	struct list_elem *iter;
-	if (! list_empty(&parent->file_descrs)) {
-		for (iter = list_begin (&parent->file_descrs);
-			iter != list_end (&parent->file_descrs);
+	if (! list_empty(&parent->descrs_t)) {
+		struct file *dup_file;
+		for (iter = list_begin (&parent->descrs_t);
+			iter != list_end (&parent->descrs_t);
 			iter = list_next (iter)) {
-			struct file *file = list_entry (iter, struct file, file_elem);
-			struct file *new_file = file_duplicate(file);
-            if (new_file == NULL) goto error; 
-            
-            new_file->fd = file->fd;
-            list_insert_ordered(&current->file_descrs, &new_file->file_elem, cmp_fd_less, NULL);
+			struct descriptor *parent_descript = list_entry (iter, struct descriptor, desc_elem);
+			if (parent_descript->file != stdin_f && parent_descript->file != stdout_f)
+				dup_file = file_duplicate(parent_descript->file);
+			else
+				dup_file = parent_descript->file;
+			struct descriptor *child_descript = calloc(1, sizeof(struct descriptor));
+			if (child_descript  == NULL) {
+				goto error;
+			}
+			child_descript->fd = parent_descript->fd;
+			child_descript->file = dup_file;
+			child_descript->file->refcnt++;
+			list_insert_ordered(&(current->descrs_t), &(child_descript->desc_elem), cmp_fd_less, NULL);
 		}
 	}
-	current->file_num = parent->file_num;
 	
 	//부모 대기 해제
 	sema_up(&current->load);
@@ -328,10 +338,11 @@ process_exit (void) {
 	}
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 
-	while (!list_empty(&curr->file_descrs)) {
-        struct list_elem *e = list_pop_front(&curr->file_descrs);
-        struct file *file = list_entry(e, struct file, file_elem);
-        file_close(file);
+	while (!list_empty(&curr->descrs_t)) {
+        struct list_elem *e = list_begin(&curr->descrs_t);
+		struct descriptor *descript = list_entry (e, struct descriptor, desc_elem);
+        int fd = descript->fd;
+        fd_to_file_for_remove(curr,fd);
     }
 
 	while (!list_empty(&curr->childs)) {

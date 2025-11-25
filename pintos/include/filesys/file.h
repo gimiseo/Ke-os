@@ -4,13 +4,20 @@
 #include "filesys/off_t.h"
 #include "lib/kernel/list.h"
 
+
+
 /* An open file. */
 struct file {
-	int fd;
 	struct inode *inode;        /* File's inode. */
 	off_t pos;                  /* Current position. */
 	bool deny_write;            /* Has file_deny_write() been called? */
-	struct list_elem file_elem;
+	int refcnt;					/*참조 횟수*/
+};
+
+struct descriptor {
+	int fd;
+	struct file *file;
+	struct list_elem desc_elem;
 };
 
 struct inode;

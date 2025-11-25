@@ -16,6 +16,7 @@ file_open (struct inode *inode) {
 		file->inode = inode;
 		file->pos = 0;
 		file->deny_write = false;
+		file->refcnt = 0;
 		return file;
 	} else {
 		inode_close (inode);
@@ -37,7 +38,6 @@ struct file *
 file_duplicate (struct file *file) {
 	struct file *nfile = file_open (inode_reopen (file->inode));
 	if (nfile) {
-		nfile->fd = file->fd;
 		nfile->pos = file->pos;
 		if (file->deny_write)
 			file_deny_write (nfile);
@@ -48,7 +48,11 @@ file_duplicate (struct file *file) {
 /* Closes FILE. */
 void
 file_close (struct file *file) {
+	
 	if (file != NULL) {
+		// file->refcnt--;
+		// if (file->refcnt > 0)
+		// 	return;
 		file_allow_write (file);
 		inode_close (file->inode);
 		free (file);
