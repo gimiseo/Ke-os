@@ -14,10 +14,10 @@
 
 /* States in a thread's life cycle. */
 enum thread_status {
-	THREAD_RUNNING,     /* Running thread. */
-	THREAD_READY,       /* Not running but ready to run. */
-	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-	THREAD_DYING        /* About to be destroyed. */
+    THREAD_RUNNING,     /* Running thread. */
+    THREAD_READY,       /* Not running but ready to run. */
+    THREAD_BLOCKED,     /* Waiting for an event to trigger. */
+    THREAD_DYING        /* About to be destroyed. */
 };
 
 /* Thread identifier type.
@@ -107,31 +107,31 @@ struct file_obj {
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
 struct thread {
-	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    int priority;                       /* Priority. */
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
 
     /* Project 1 - Alarm Clock */
     int64_t wake_time;
 
-	/* Project 1-3 - donation */
+    /* Project 1-3 - donation */
     int actual_priority; 				/*donation 종료시 기존 priority로 돌아오기용*/
-	struct lock *lock_on_wait;			/*스레드가 요청했지만 다른 스레드가 점유하고 있어서 기다리는 lock*/
-	struct list donation;				/*priority 기부 리스트 - 기부받기 전으로 되돌리기 용*/
-	struct list_elem donation_elem;		/*이 스레드가 기부하면 들어가는 요소*/
+    struct lock *lock_on_wait;			/*스레드가 요청했지만 다른 스레드가 점유하고 있어서 기다리는 lock*/
+    struct list donation;				/*priority 기부 리스트 - 기부받기 전으로 되돌리기 용*/
+    struct list_elem donation_elem;		/*이 스레드가 기부하면 들어가는 요소*/
 
-	/*project 1-4 - advenced*/
-	int nice;
-	int recent_cpu;
+    /*project 1-4 - advenced*/
+    int nice;
+    int recent_cpu;
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
-	uint64_t *pml4;                     /* Page map level 4 */
+    /* Owned by userprog/process.c. */
+    uint64_t *pml4;                     /* Page map level 4 */
     int exit_num;
     struct file *exec_file;
     struct file_obj fd_table[MAX_FILE];
@@ -147,13 +147,13 @@ struct thread {
     struct semaphore sema_wait_parent;
 #endif
 #ifdef VM
-	/* Table for whole virtual memory owned by thread. */
-	struct supplemental_page_table spt;
+    /* Table for whole virtual memory owned by thread. */
+    struct supplemental_page_table spt;
 #endif
 
-	/* Owned by thread.c. */
-	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
+    /* Owned by thread.c. */
+    struct intr_frame tf;               /* Information for switching */
+    unsigned magic;                     /* Detects stack overflow. */
 };
 
 /* If false (default), use round-robin scheduler.

@@ -34,15 +34,15 @@ struct lock filesys_lock;
 
 void
 syscall_init (void) {
-	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
-			((uint64_t)SEL_KCSEG) << 32);
-	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
+    write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
+            ((uint64_t)SEL_KCSEG) << 32);
+    write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
 
-	/* The interrupt service rountine should not serve any interrupts
-	 * until the syscall_entry swaps the userland stack to the kernel
-	 * mode stack. Therefore, we masked the FLAG_FL. */
-	write_msr(MSR_SYSCALL_MASK,
-			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+    /* The interrupt service rountine should not serve any interrupts
+     * until the syscall_entry swaps the userland stack to the kernel
+     * mode stack. Therefore, we masked the FLAG_FL. */
+    write_msr(MSR_SYSCALL_MASK,
+            FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
     lock_init(&filesys_lock);
 }
 
@@ -63,7 +63,7 @@ syscall_handler (struct intr_frame *f) {
     char *buffer, *file, *thread_name, *cmd_line;
 
     struct thread *t = thread_current ();
-	// TODO: Your implementation goes here.
+    // TODO: Your implementation goes here.
     switch (f->R.rax) {
         // project 2
         case SYS_HALT:
