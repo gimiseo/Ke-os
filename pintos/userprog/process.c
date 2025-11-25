@@ -30,6 +30,16 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+/*fd 비교 함수, 용병*/
+static bool 
+cmp_fd_less (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED) {
+	struct file *fa = list_entry (a, struct file, file_elem);
+    struct file *fb = list_entry (b, struct file, file_elem);
+	return fa->fd < fb->fd;
+}
+
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
@@ -173,10 +183,6 @@ __do_fork (void *aux) {
 	struct intr_frame *parent_if;
 	bool succ = true;
 
-	// //아비 아기 세팅
-	// list_push_front(&(parent->childs), &(current->child_elem));
-	// current->parent = parent;
-
 	//aux의 tf를 넘겨준다...?
 	parent_if = &parent->parent_if;
 	/* 1. Read the cpu context to local stack. */
@@ -205,15 +211,28 @@ __do_fork (void *aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
-	for (int i = 0; i < FILE_MAX; i++) {
-		struct file *file = parent->file_descrs[i];
-		if (file == NULL)
-			continue;
-		if (file != stdin_f && file != stdout_f)
-			file = file_duplicate(file);
-		current->file_descrs[i] = file;
+	// for (int i = 0; i < FILE_MAX; i++) {
+	// 	struct file *file = parent->file_descrs[i];
+	// 	if (file == NULL)
+	// 		continue;
+	// 	if (file != stdin_f && file != stdout_f)
+	// 		file = file_duplicate(file);
+	// 	current->file_descrs[i] = file;
+	// }
+	struct list_elem *iter;
+	if (! list_empty(&parent->file_descrs)) {
+		for (iter = list_begin (&parent->file_descrs);
+			iter != list_end (&parent->file_descrs);
+			iter = list_next (iter)) {
+			struct file *file = list_entry (iter, struct file, file_elem);
+			struct file *new_file = file_duplicate(file);
+            if (new_file == NULL) goto error; 
+            
+            new_file->fd = file->fd;
+            list_insert_ordered(&current->file_descrs, &new_file->file_elem, cmp_fd_less, NULL);
+		}
 	}
-	current->next_num = parent->next_num;
+	current->file_num = parent->file_num;
 	
 	//부모 대기 해제
 	sema_up(&current->load);
@@ -309,11 +328,12 @@ process_exit (void) {
 	}
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_num);
 
-	for (int i = 2; i < FILE_MAX; i++) {
-		if (curr->file_descrs[i] != NULL)
-			file_close(curr->file_descrs[i]);
-			curr->file_descrs[i] = NULL;
-	}
+	while (!list_empty(&curr->file_descrs)) {
+        struct list_elem *e = list_pop_front(&curr->file_descrs);
+        struct file *file = list_entry(e, struct file, file_elem);
+        file_close(file);
+    }
+
 	while (!list_empty(&curr->childs)) {
         struct list_elem *e = list_begin(&curr->childs);
         struct thread *child = list_entry(e, struct thread, child_elem);

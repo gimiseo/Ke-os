@@ -2,15 +2,9 @@
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "lib/kernel/list.h"
 
-/* An open file. */
-struct file {
-	int fd;
-	struct inode *inode;        /* File's inode. */
-	off_t pos;                  /* Current position. */
-	bool deny_write;            /* Has file_deny_write() been called? */
-	struct list_elem file_elem;
-};
+
 
 /* Opens a file for the given INODE, of which it takes ownership,
  * and returns the new file.  Returns a null pointer if an
@@ -43,6 +37,7 @@ struct file *
 file_duplicate (struct file *file) {
 	struct file *nfile = file_open (inode_reopen (file->inode));
 	if (nfile) {
+		nfile->fd = file->fd;
 		nfile->pos = file->pos;
 		if (file->deny_write)
 			file_deny_write (nfile);

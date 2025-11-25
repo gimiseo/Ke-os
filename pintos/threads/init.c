@@ -21,7 +21,6 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
-#include "filesys/file.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/exception.h"
@@ -94,8 +93,6 @@ main (void) {
 	tss_init ();
 	gdt_init ();
 #endif
-	stdin_f = (struct file *)malloc(sizeof(struct file));
-	stdout_f = (struct file *)malloc(sizeof(struct file));
 	/* Initialize interrupt handlers. */
 	intr_init ();
 	timer_init ();
@@ -124,8 +121,6 @@ main (void) {
 
 	/* Run actions specified on kernel command line. */
 	run_actions (argv);
-	free(stdin_f);
-	free(stdout_f);
 	/* Finish up. */
 	if (power_off_when_done)
 		power_off ();

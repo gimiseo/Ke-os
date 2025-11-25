@@ -30,7 +30,6 @@ struct lock filesys_lock;
 // 	putbuf(f_buffer, size);
 // 	return size;
 // }
-
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -56,6 +55,79 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 	lock_init(&filesys_lock);
+}
+
+/*fd 비교 함수*/
+static bool 
+cmp_fd_less (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED) {
+	struct file *fa = list_entry (a, struct file, file_elem);
+    struct file *fb = list_entry (b, struct file, file_elem);
+	return fa->fd < fb->fd;
+}
+
+//open fd 결정해주는 함수
+static int 
+find_pos_fd_num (struct thread * curr) {
+	struct list_elem *iter;
+	int prev_num = 1;
+	//file_max 넘어가면 끝
+	if (curr->file_num >= FILE_MAX)
+		return -1;
+	if (list_empty(&curr->file_descrs)) {\
+		return 2;
+	}
+	for (iter = list_begin (&curr->file_descrs);
+        iter != list_end (&curr->file_descrs);
+        iter = list_next (iter)) {
+		struct file *file = list_entry (iter, struct file, file_elem);
+		if (file->fd - prev_num > 1)
+		{
+			return prev_num + 1;
+		}
+		prev_num = file->fd;
+    }
+	return prev_num + 1;
+}
+
+static int
+fd_to_file_for_remove(struct thread * curr, int fd) {
+	struct list_elem *iter;
+	if (list_empty(&curr->file_descrs)) {
+		return NULL;
+	}
+	for (iter = list_begin (&curr->file_descrs);
+        iter != list_end (&curr->file_descrs);
+        iter = list_next (iter)) {
+		struct file *file = list_entry (iter, struct file, file_elem);
+		if (file->fd == fd)
+		{
+			curr->file_num--;
+			list_remove(iter);
+			file_close(file);
+			return true;
+		}
+    }
+	return false;
+}
+
+struct file *
+fd_to_file_for_find(struct thread * curr, int fd) {
+	struct list_elem *iter;
+	if (list_empty(&curr->file_descrs)) {
+		return NULL;
+	}
+	for (iter = list_begin (&curr->file_descrs);
+        iter != list_end (&curr->file_descrs);
+        iter = list_next (iter)) {
+		struct file *file = list_entry (iter, struct file, file_elem);
+		if (file->fd == fd)
+		{
+			return file;
+		}
+    }
+	return NULL;
 }
 
 static void
@@ -86,21 +158,8 @@ create (const char *file, unsigned initial_size) {
 
 static void
 close (int fd) {
-	struct file *file = NULL;
 	struct thread *curr = thread_current();
-	if (fd < 0 || fd >= FILE_MAX) {
-		thread_current()->exit_num = -1;
-		thread_exit ();
-	}
-	file = curr->file_descrs[fd];
-	if (file == NULL)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
-	}
-	if (file != stdin_f && file != stdout_f)
-		file_close(file);
-	curr->file_descrs[fd] = NULL;
+	fd_to_file_for_remove (curr, fd);
 }
 
 
@@ -116,82 +175,71 @@ open (const char *file_name) {
 		lock_release(&filesys_lock);
 		return -1;
 	}
-	fd = curr->next_num;
-	if (fd >= FILE_MAX) {
+	fd = find_pos_fd_num (curr);
+	if (fd == -1) {
 		file_close(file);
 		lock_release(&filesys_lock);
 		return -1;
 	}
-	curr->file_descrs[fd] = file;
-	curr->next_num++;
+	file->fd = fd;
+	list_insert_ordered(&(curr->file_descrs), &(file->file_elem), cmp_fd_less, NULL);
 	lock_release(&filesys_lock);
 	return fd;
 }
 
 static int
 read (int fd, void *buffer, unsigned size) {
-	struct file *file = NULL;
-	struct thread *curr = thread_current();
+	
 	user_memory_access(buffer);
-	int read_byte;
-	if (fd < 0 || fd >= FILE_MAX)
-		return -1;
-	file = curr->file_descrs[fd];
-	if (file == NULL)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
-	}
-	if (file == stdout_f)
-		return -1;
-	if (file == stdin_f) {
-		char *ptr = (char *)buffer;
+	if (fd < 0) return -1;
+	
+	struct thread *curr = thread_current();
+	struct file *file = fd_to_file_for_find(curr, fd);
+
+	//리스트에 있으면 무조건 파일임 dup2된거라고 기정사실화
+	if (file != NULL) {
 		lock_acquire(&filesys_lock);
-		for (int i = 0; i < size; i++)
-		{
-			*ptr++ = input_getc();
-			read_byte++;
-		}
+		int bytes = file_read (file, buffer, size);
 		lock_release(&filesys_lock);
-		return read_byte;
+		return bytes;
 	}
-	lock_acquire(&filesys_lock);
-	read_byte = file_read (file, buffer, size);
-	lock_release(&filesys_lock);
-	return read_byte;
+
+	//리스트에 없는데 fd가 0? -> 표준이 살아있는거임
+	if (fd == 0) {
+		char *ptr = (char *)buffer;
+		for (int i = 0; i < size; i++){
+			*ptr++ = input_getc();
+		}
+		return size;
+	}
+	return -1;
 }
 
 static int
 write (int fd, void *buffer, unsigned size) {
-	struct file *file = NULL;
-	struct thread *curr = thread_current();
 	user_memory_access(buffer);
-	int read_byte;
-	if (fd < 0 || fd >= FILE_MAX)
-		return -1;
-	file = curr->file_descrs[fd];
-	if (file == NULL)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
-	}
-	if (file == stdin_f)
-		return -1;
-	if (file == stdout_f) {
-		char f_buffer[size+1];
-		strlcpy(f_buffer, (char *)buffer, size + 1);
-		putbuf(f_buffer, size);
-		return size;
-	}
-	lock_acquire(&filesys_lock);
-	read_byte = file_write (file, buffer, size);
-	lock_release(&filesys_lock);
-	if (read_byte == -1)
-	{
-		thread_current()->exit_num = -1;
-		thread_exit ();
-	}
-	return read_byte;
+    if (fd < 0) return -1;
+
+    struct thread *curr = thread_current();
+    struct file *file = fd_to_file_for_find(curr, fd);
+
+    if (file != NULL) {
+		// 쓰기 방지된 파일 체크
+        if (file->deny_write) 
+			return 0; 
+        lock_acquire(&filesys_lock);
+        int bytes = file_write(file, buffer, size);
+        lock_release(&filesys_lock);
+        return bytes;
+    }
+
+    // 리스트에 없는데 fd가 1번이면 기본 출력
+    if (fd == 1) {
+        putbuf(buffer, size);
+        return size;
+    }
+
+    return -1;
 }
 
 static void
@@ -214,7 +262,7 @@ exec (const char *cmd_line) {
 
 static void
 seek (int fd, off_t new_pos) {
-	struct file * file = thread_current()->file_descrs[fd];
+	struct file * file = fd_to_file_for_find(thread_current(), fd);
 	if (fd < 0 || fd >= FILE_MAX || file == NULL) {
 		return;
 	}
@@ -237,18 +285,23 @@ remove(const char *file)
 
 static int
 dup2 (int oldfd, int newfd) {
-	struct file *dup_file;
-	if (oldfd < 0 || oldfd >= FILE_MAX)
+	struct thread * curr = thread_current();
+	if (oldfd < 0 || newfd < 0)
 		return -1;
-	struct file *oldfile = thread_current()->file_descrs[oldfd];
-	struct file *newfile = thread_current()->file_descrs[newfd];
+	if (oldfd == newfd)
+		return newfd;
+	struct file *oldfile = fd_to_file_for_find(curr, oldfd);
 	if (oldfile == NULL)
 		return -1;
-	if (oldfile->inode == newfile->inode)
-		return newfd;
-	dup_file = file_duplicate(oldfile);
-	close(newfd);
-	thread_current()->file_descrs[newfd] = dup_file;
+	struct file *target_file = fd_to_file_for_find(curr, newfd);
+	if (target_file != NULL) {
+		fd_to_file_for_remove (curr, newfd);
+	}
+	struct file *newfile = file_duplicate(oldfile);
+	if (newfile == NULL)
+		return -1;
+	newfile->fd = newfd;
+	list_insert_ordered(&(curr->file_descrs), &(newfile->file_elem), cmp_fd_less, NULL);;
 	return newfd;
 }
 
@@ -291,11 +344,12 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_FILESIZE:
 			int fd = f->R.rdi;
-			if (fd < 2 || fd >= FILE_MAX || thread_current()->file_descrs[fd] == NULL){
+			struct thread *curr = thread_current();
+			if (fd < 2 || fd_to_file_for_find(curr, fd) == NULL){
 				f->R.rax = -1;
 			}
 			else {
-				f->R.rax = (uint64_t)file_length(thread_current()->file_descrs[fd]);
+				f->R.rax = (uint64_t)file_length(fd_to_file_for_find(curr, fd));
 			}
 			break;
 		case SYS_READ:
