@@ -620,23 +620,25 @@ init_thread (struct thread *t, const char *name, int priority) {
     t->recent_cpu = RECENT_CPU_DEFAULT;
 #ifdef USERPROG
     t->exit_num = 0;
-    for (int i = 0; i < MAX_FILE; i++) {
+    t->parent_thread = NULL;
+
+    t->fd_table[STDIN].fd = STDIN;
+    t->fd_table[STDIN].file = STDIN_FILE;
+    t->fd_status[STDIN] = true;
+    t->fd_table[STDOUT].fd = STDOUT;
+    t->fd_table[STDOUT].file = STDOUT_FILE;
+    t->fd_status[STDOUT] = true;
+    for (int i = 2; i < MAX_FILE; i++) {
         t->fd_table[i].fd = NULL_FD;
         t->fd_table[i].file = NULL;
         t->fd_status[i] = false;
     }
-    t->fd_table[STDIN].fd = STDIN;
-    t->fd_table[STDIN].file = STDIN_FILE;
-    t->fd_table[STDOUT].fd = STDOUT;
-    t->fd_table[STDOUT].file = STDOUT_FILE;
-    t->fd_status[STDIN] = true;
-    t->fd_status[STDOUT] = true;
+    
+    list_init(&t->childs);
 
     sema_init(&t->sema_wait, 0);
-    t->parent_thread = NULL;
-    list_init(&t->childs);
     sema_init(&t->sema_load, 0);
-    sema_init(&t->sema_wait_parent, 0);
+    sema_init(&t->sema_exit, 0);
 #endif
 }
 

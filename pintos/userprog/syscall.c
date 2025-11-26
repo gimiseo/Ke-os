@@ -1,18 +1,20 @@
-#include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
-#include "threads/loader.h"
-#include "userprog/gdt.h"
-#include "threads/flags.h"
-#include "intrinsic.h"
-#include "threads/init.h"
+#include "devices/input.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-#include "devices/input.h"
+#include "threads/flags.h"
+#include "threads/init.h"
+#include "threads/interrupt.h"
+#include "threads/loader.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include "userprog/gdt.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
+#include "intrinsic.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -46,12 +48,47 @@ syscall_init (void) {
     lock_init(&filesys_lock);
 }
 
-static void check_addr(char *addr) {
-    struct thread *t = thread_current();
-    if (addr == NULL || addr >= (char *)KERN_BASE || pml4_get_page(t->pml4, addr) == NULL) {
-        t->exit_num = -1;
+static void check_addr(const void *addr) {
+    struct thread *curr = thread_current();
+    if (addr == NULL || addr >= (void *)KERN_BASE || pml4_get_page(curr->pml4, addr) == NULL) {
+        curr->exit_num = -1;
         thread_exit();
     }
+}
+
+/* syscall functions */
+static void syscall_halt(void) {
+    power_off();
+}
+
+static void syscall_exit(int status) {
+    struct thread *t = thread_current();
+
+    t->exit_num = status;
+    thread_exit();
+}
+
+static tid_t syscall_fork(const char *thread_name,
+                struct intr_frame *f) {
+    check_addr(thread_name);
+
+    return process_fork(thread_name, f);
+}
+
+static void syscall_exec(const char *cmd_line) {
+    check_addr(cmd_line);
+
+    char *fn_copy = palloc_get_page(0);
+    if (fn_copy == NULL) {
+        thread_current()->exit_num = -1;
+        thread_exit();
+    }
+
+    strlcpy(fn_copy, cmd_line, PGSIZE);
+    process_exec(fn_copy);
+
+    thread_current()->exit_num = -1;
+    thread_exit();
 }
 
 /* Arguments order: %rdi, %rsi, %rdx, %r10, %r8, %r9 */
@@ -62,43 +99,26 @@ syscall_handler (struct intr_frame *f) {
     unsigned size, initial_size, position;
     char *buffer, *file, *thread_name, *cmd_line;
 
-    struct thread *t = thread_current ();
+    struct thread *t = thread_current();
     // TODO: Your implementation goes here.
     switch (f->R.rax) {
         // project 2
         case SYS_HALT:
-            power_off();    
+            syscall_halt();
+            NOT_REACHED();
             break;
 
         case SYS_EXIT:
-            status = f->R.rdi;
-
-            t->exit_num = status;
-            thread_exit ();
+            syscall_exit((int)f->R.rdi);
+            NOT_REACHED();
             break;
         
         case SYS_FORK:
-            thread_name = (char *)f->R.rdi;
-            check_addr(thread_name);
-            f->R.rax = process_fork(thread_name, f);
+            f->R.rax = syscall_fork((char *)f->R.rdi, f);
             break;
 
         case SYS_EXEC:
-            cmd_line = (char *)f->R.rdi;
-            
-            check_addr(cmd_line);
-            char *fn_copy = palloc_get_page(0);
-            if (fn_copy == NULL) {
-                thread_current()->exit_num = -1;
-                thread_exit();
-            }
-
-            strlcpy(fn_copy, cmd_line, PGSIZE);
-            if (process_exec(fn_copy) == -1) {
-                thread_current()->exit_num = -1;
-                thread_exit();
-            }
-        
+            syscall_exec((char *)f->R.rdi);
             NOT_REACHED();
             break;
         

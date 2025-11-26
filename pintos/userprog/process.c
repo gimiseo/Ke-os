@@ -15,11 +15,11 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
-#include "intrinsic.h"
-#include "threads/synch.h"
 #include "userprog/syscall.h"
+#include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -32,7 +32,7 @@ static void __do_fork (void *);
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
-    struct thread *current = thread_current ();
+    struct thread *current = thread_current();
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -72,7 +72,7 @@ process_create_initd (const char *file_name) {
 static void
 initd (void *f_name) {
 #ifdef VM
-    supplemental_page_table_init (&thread_current ()->spt);
+    supplemental_page_table_init (&thread_current()->spt);
 #endif
 
     process_init ();
@@ -87,26 +87,25 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
     /* Clone current thread to new thread.*/
-    struct thread *t = thread_current();
+    struct thread *curr = thread_current();
     struct thread *child;
-    memcpy(&t->tf_fork, if_, sizeof(struct intr_frame));
-    tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, t);
+    memcpy(&curr->tf_fork, if_, sizeof(struct intr_frame));
+    tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, curr);
     
     if (tid == TID_ERROR) {
         return TID_ERROR;
     }
 
     struct list_elem *iter;
-    for (iter = list_begin (&t->childs);
-        iter != list_end (&t->childs);
-        iter = list_next (iter)) {
+    for (iter = list_begin (&curr->childs);
+         iter != list_end (&curr->childs);
+         iter = list_next (iter)) {
         child = list_entry (iter, struct thread, child_elem);
-        if (child->tid == tid)
-        {
+        if (child->tid == tid) {
             sema_down(&child->sema_load);
             if (child->exit_num == -1) {
                 list_remove(&child->child_elem);
-                sema_up(&child->sema_wait_parent);
+                sema_up(&child->sema_exit);
                 return TID_ERROR;
             }
             break;
@@ -120,7 +119,7 @@ process_fork (const char *name, struct intr_frame *if_) {
  * pml4_for_each. This is only for the project 2. */
 static bool
 duplicate_pte (uint64_t *pte, void *va, void *aux) {
-    struct thread *current = thread_current ();
+    struct thread *current = thread_current();
     struct thread *parent = (struct thread *) aux;
     void *parent_page;
     void *newpage;
@@ -166,7 +165,7 @@ static void
 __do_fork (void *aux) {
     struct intr_frame if_;
     struct thread *parent = (struct thread *)aux;
-    struct thread *current = thread_current ();
+    struct thread *current = thread_current();
     /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
     struct intr_frame *parent_if = &parent->tf_fork;
     bool succ = true;
@@ -226,8 +225,8 @@ __do_fork (void *aux) {
     if (succ)
         do_iret (&if_);
 error:
-    sema_up(&current->sema_load);
     current->exit_num = -1;
+    sema_up(&current->sema_load);
     thread_exit ();
 }
 
@@ -277,19 +276,19 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid) {
-    struct thread *t = thread_current();
+    struct thread *curr = thread_current();
     struct thread *child;
-    struct list_elem *iter;
     int child_exit;
 
-    for (iter = list_begin(&t->childs);
-         iter != list_end(&t->childs);
+    struct list_elem *iter;
+    for (iter = list_begin(&curr->childs);
+         iter != list_end(&curr->childs);
          iter = list_next(iter)) {
         child = list_entry (iter, struct thread, child_elem);
         if (child->tid == child_tid) {
             sema_down(&child->sema_wait);
             list_remove(iter);
-            sema_up(&child->sema_wait_parent);
+            sema_up(&child->sema_exit);
             child_exit = child->exit_num;
             return child_exit;
         }
@@ -300,7 +299,7 @@ process_wait (tid_t child_tid) {
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
-    struct thread *curr = thread_current ();
+    struct thread *curr = thread_current();
     struct file *file;
     if (curr->pml4 == NULL) {
         return;
@@ -312,6 +311,7 @@ process_exit (void) {
         if (curr->fd_table[i].file > STDOUT_FILE) {
             file = curr->fd_table[i].file;
             curr->fd_table[i].file = NULL;
+
             bool is_close = true;
             for (int i = 0; i < MAX_FILE; i++) {
                 if (curr->fd_table[i].file == file) {
@@ -319,6 +319,7 @@ process_exit (void) {
                     break;
                 }
             }
+
             if (is_close) {
                 file_close(file);
             }
@@ -330,14 +331,14 @@ process_exit (void) {
         struct thread *child = list_entry(e, struct thread, child_elem);
         
         list_remove(e);
-        sema_up(&child->sema_wait_parent);
+        sema_up(&child->sema_exit);
     }
 
     file_close(curr->exec_file);
     sema_up(&curr->sema_wait);
     
     if (curr->parent_thread != NULL) {
-        sema_down(&curr->sema_wait_parent);
+        sema_down(&curr->sema_exit);
     }
 
     process_cleanup();
@@ -346,7 +347,7 @@ process_exit (void) {
 /* Free the current process's resources. */
 static void
 process_cleanup (void) {
-    struct thread *curr = thread_current ();
+    struct thread *curr = thread_current();
 
 #ifdef VM
     supplemental_page_table_kill (&curr->spt);
@@ -446,7 +447,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
-    struct thread *t = thread_current ();
+    struct thread *t = thread_current();
     struct ELF ehdr;
     struct file *file = NULL;
     off_t file_ofs;
@@ -454,7 +455,11 @@ load (const char *file_name, struct intr_frame *if_) {
     int i;
     //신규 처리 파일명 이상해서 안들어간다능
     char *save;
-    char file_name_cp[128];
+    char *file_name_cp = palloc_get_page(0);
+    if (file_name_cp == NULL) {
+        return false;
+    }
+
     strlcpy(file_name_cp, file_name, 128);
     strtok_r(file_name, " ", &save);
 
@@ -462,7 +467,7 @@ load (const char *file_name, struct intr_frame *if_) {
     t->pml4 = pml4_create ();
     if (t->pml4 == NULL)
         goto done;
-    process_activate (thread_current ());
+    process_activate (thread_current());
 
     /* Open executable file. */
     file = filesys_open (file_name);
@@ -589,15 +594,13 @@ load (const char *file_name, struct intr_frame *if_) {
     if_->R.rsi = (uint64_t)(if_->rsp + 8);
     /* TODO: Your code goes here.
      * TODO: Implement argument passing (see project2/argument_passing.html). */
-    // while(*save != NULL)
-    // {
-    // 	if (*save)
-    // }
+
     // hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true); 
     success = true;
 
 done:
     /* We arrive here whether the load is successful or not. */
+    palloc_free_page(file_name_cp);
     if (file != NULL) {
         file_deny_write(file);
         t->exec_file = file;
@@ -743,7 +746,7 @@ setup_stack (struct intr_frame *if_) {
  * if memory allocation fails. */
 static bool
 install_page (void *upage, void *kpage, bool writable) {
-    struct thread *t = thread_current ();
+    struct thread *t = thread_current();
 
     /* Verify that there's not already a page at that virtual
      * address, then map our page there. */

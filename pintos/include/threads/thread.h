@@ -4,8 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "threads/interrupt.h"
 #include "filesys/file.h"
+#include "threads/interrupt.h"
 #include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -41,10 +41,10 @@ typedef int tid_t;
 #define NULL_FD -1
 #define STDIN  0
 #define STDOUT 1
-#define STDIN_FILE 1
-#define STDOUT_FILE 2
+#define STDIN_FILE  (struct file *)1
+#define STDOUT_FILE (struct file *)2
 
-struct file_obj {
+struct file_entry {
     int fd;
     struct file *file;
 };
@@ -132,19 +132,22 @@ struct thread {
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint64_t *pml4;                     /* Page map level 4 */
+
     int exit_num;
     struct file *exec_file;
-    struct file_obj fd_table[MAX_FILE];
+    struct thread *parent_thread;
+
+    struct file_entry fd_table[MAX_FILE];
     bool fd_status[MAX_FILE];
 
-    struct semaphore sema_wait;
-    struct thread *parent_thread;
     struct list childs;
     struct list_elem child_elem;
-
+    
     struct intr_frame tf_fork;
+
+    struct semaphore sema_wait;
     struct semaphore sema_load;
-    struct semaphore sema_wait_parent;
+    struct semaphore sema_exit;
 #endif
 #ifdef VM
     /* Table for whole virtual memory owned by thread. */
