@@ -277,7 +277,7 @@ void thread_unblock(struct thread* t)
     old_level = intr_disable();
     ASSERT(t->status == THREAD_BLOCKED);
     // list_push_back (&ready_list, &t->elem);
-    // project1-2-> 뒤에다 넣지말고 잘 넣기
+    // project1-2
     list_insert_ordered(&ready_list, &t->elem, cmp_priority_more, NULL);
     t->status = THREAD_READY;
     intr_set_level(old_level);
@@ -293,7 +293,6 @@ void thread_preempted(void)
     struct thread* ready_front = list_entry(list_front(&ready_list), struct thread, elem);
     if (curr->priority < ready_front->priority)
         if (intr_context()) {
-            // 이런 좋은게 있었구나.
             intr_yield_on_return();
         } else
             thread_yield();

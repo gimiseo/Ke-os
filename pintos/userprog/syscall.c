@@ -128,6 +128,17 @@ static void user_memory_access(const void* addr)
         thread_current()->exit_num = -1;
         thread_exit();
     }
+#ifdef VM
+    // if (spt_find_page(&thread_current()->spt, (void*)addr) == NULL) {
+    //     thread_current()->exit_num = -1;
+    //     thread_exit();
+    // }
+#else
+    if (pml4_get_page(thread_current()->pml4, addr) == NULL) {
+        thread_current()->exit_num = -1;
+        thread_exit();
+    }
+#endif
 }
 
 static bool create(const char* file, unsigned initial_size)
@@ -190,6 +201,11 @@ static int read(int fd, void* buffer, unsigned size)
     struct thread* curr = thread_current();
     struct file* file = fd_to_file_for_find(curr, fd);
 
+    struct page* page = spt_find_page(&curr->spt, buffer);
+    if (page && !page->writable) {
+        thread_current()->exit_num = -1;
+        thread_exit();
+    }
     if (file == NULL)
         return -1;
     if (file != stdin_f && file != stdout_f) {
@@ -215,7 +231,6 @@ static int write(int fd, void* buffer, unsigned size)
     user_memory_access(buffer);
     if (fd < 0)
         return -1;
-
     struct thread* curr = thread_current();
     struct file* file = fd_to_file_for_find(curr, fd);
 
@@ -312,12 +327,44 @@ static unsigned int tell(int fd)
     return -1;
 }
 
+static void* mmap(void* addr, size_t length, int writable, int fd, off_t offset)
+{
+    // It must fail if addr is not page-aligned, Therefore, if addr is 0, it must fail
+    if (!addr || addr != pg_round_down(addr))
+        return NULL;
+
+    if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length))
+        return NULL;
+
+    if (offset != pg_round_down(offset))
+        return NULL;
+
+    if (spt_find_page(&thread_current()->spt, addr))
+        return NULL;
+
+    struct file* f = fd_to_file_for_find(thread_current(), fd);
+    if (f == NULL)
+        return NULL;
+
+    if (file_length(f) == 0 || length <= 0)
+        return NULL;
+
+    return do_mmap(addr, length, writable, f, offset);
+}
+
+static void munmap(void* addr)
+{
+    do_munmap(addr);
+}
+
 /* The main system call interface */
 void syscall_handler(struct intr_frame* f)
 {
     // TODO: Your implementation goes here.
     int syscall_num = f->R.rax;
+
 #ifdef VM
+    // syscall은 반드시 유저모드에서 이때 intra_frame은 항상 유저스택정보를 가지고 있다.
     thread_current()->rsp = f->rsp;
 #endif
     size_t size;
@@ -377,6 +424,12 @@ void syscall_handler(struct intr_frame* f)
         break;
     case SYS_TELL:
         f->R.rax = tell(f->R.rdi);
+        break;
+    case SYS_MMAP:
+        f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+        break;
+    case SYS_MUNMAP:
+        munmap(f->R.rdi);
         break;
     default:
         NOT_REACHED();

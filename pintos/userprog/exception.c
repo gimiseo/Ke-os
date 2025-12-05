@@ -100,33 +100,33 @@ static void kill(struct intr_frame* f)
     }
 }
 
-/* 페이지 폴트 핸들러입니다. 이것은 가상 메모리를 구현하기 위해 반드시 채워져야 하는
-   뼈대(skeleton) 코드입니다. 프로젝트 2의 일부 해결 방법에서도 이 코드를 수정해야
-   할 수 있습니다.
+/* Page fault handler.  This is a skeleton that must be filled in
+   to implement virtual memory.  Some solutions to project 2 may
+   also require modifying this code.
 
-   진입 시, 폴트를 일으킨 주소는 CR2(제어 레지스터 2)에 저장되어 있으며,
-   폴트에 대한 정보는 exception.h의 PF_* 매크로에 설명된 형식으로
-   F의 error_code 멤버에 들어있습니다.
-
-   여기 있는 예제 코드는 그 정보를 파싱하는 방법을 보여줍니다.
-
-   이 두 가지에 대한 더 많은 정보는 [IA32-v3a] 섹션 5.15
-   "Exception and Interrupt Reference"의 "Interrupt 14--Page Fault Exception (#PF)"
-   설명에서 찾을 수 있습니다. */
+   At entry, the address that faulted is in CR2 (Control Register
+   2) and information about the fault, formatted as described in
+   the PF_* macros in exception.h, is in F's error_code member.  The
+   example code here shows how to parse that information.  You
+   can find more information about both of these in the
+   description of "Interrupt 14--Page Fault Exception (#PF)" in
+   [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame* f)
 {
-    bool not_present; /* True: 존재하지 않는 페이지(not-present), False: 읽기 전용(r/o) 페이지에 쓰기 시도. */
-    bool write;       /* True: 쓰기(write) 접근, False: 읽기(read) 접근. */
-    bool user;        /* True: 유저(user)에 의한 접근, False: 커널(kernel)에 의한 접근. */
-    void* fault_addr; /* 폴트가 발생한 주소. */
-                      /* 폴트를 유발한 접근 대상 가상 주소인 '폴팅 주소(faulting address)'를 획득합니다.
-                             이것은 코드일 수도 있고 데이터일 수도 있습니다.
-                             이것은 폴트를 일으킨 명령어의 주소(그건 f->rip임)와 반드시 일치하지는 않습니다. */
+    bool not_present; /* True: not-present page, false: writing r/o page. */
+    bool write;       /* True: access was write, false: access was read. */
+    bool user;        /* True: access by user, false: access by kernel. */
+    void* fault_addr; /* Fault address. */
+
+    /* Obtain faulting address, the virtual address that was
+       accessed to cause the fault.  It may point to code or to
+       data.  It is not necessarily the address of the instruction
+       that caused the fault (that's f->rip). */
 
     fault_addr = (void*)rcr2();
 
-    /* 인터럽트를 다시 켭니다 (CR2 값이 변경되기 전에 확실히 읽어오기 위해
-           잠시 꺼뒀던 것뿐입니다). */
+    /* Turn interrupts back on (they were only off so that we could
+       be assured of reading CR2 before it changed). */
     intr_enable();
 
     /* Determine cause. */
@@ -139,23 +139,12 @@ static void page_fault(struct intr_frame* f)
     if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
         return;
 #endif
-
-	/* 시스템 콜 처리 중(Kernel Context)에 유저 주소(User Vaddr)에 접근하다가 
-       Page Fault가 났는데, 위에서 처리가 안 됐다면(Lazy Loading 아님) 
-       이는 유저가 잘못된 포인터를 넘긴 명백한 Bad Pointer 상황입니다.
-       이때는 에러 메시지를 출력하지 말고 조용히 프로세스를 종료해야 테스트를 통과합니다. */
-       
-    if (!user && is_user_vaddr(fault_addr)) {
-        thread_current()->exit_num = -1;
-        thread_exit();
-    }
     /* Count page faults. */
     page_fault_cnt++;
-
+    thread_current()->exit_num = -1;
+    thread_exit();
     /* If the fault is true fault, show info and exit. */
     printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
            not_present ? "not present" : "rights violation", write ? "writing" : "reading", user ? "user" : "kernel");
-    thread_current()->exit_num = -1;
-    thread_exit();
     // kill (f);
 }

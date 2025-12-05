@@ -79,7 +79,7 @@ class Pintos(object):
 
     def __prepare_kernel_argument(self, puts, gets):
         rem = []
-        args = []
+        args = ['-q']  # Auto power-off after completion
         for idx, arg in enumerate(self.args):
             if arg[0] != '-':
                 rem = self.args[idx:]
@@ -132,6 +132,7 @@ class Pintos(object):
         cmd.extend(['-cpu', 'qemu64'])
         cmd.extend(['-m', str(self.mem)])
         cmd.extend(['-no-reboot'])
+        cmd.extend(['-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04'])
         # cmd.extend(['-enable-kvm']) # Sadly, kvm is not available on server.
         cmd.extend(['-serial', 'mon:stdio'])
         return cmd

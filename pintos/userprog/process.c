@@ -31,7 +31,7 @@ static bool load(const char* file_name, struct intr_frame* if_);
 static void initd(void* f_name);
 static void __do_fork(void*);
 
-/*fd 비교 함수, 용병*/
+/*fd 비교 함수*/
 static bool cmp_fd_less(const struct list_elem* a, const struct list_elem* b, void* aux UNUSED)
 {
     struct descriptor* fd_a = list_entry(a, struct descriptor, desc_elem);
@@ -173,7 +173,7 @@ static void __do_fork(void* aux)
     struct intr_frame* parent_if;
     bool succ = true;
 
-    // aux의 tf를 넘겨준다...?
+    // aux의 tf를 넘겨준다
     parent_if = &parent->parent_if;
     /* 1. Read the cpu context to local stack. */
     memcpy(&if_, parent_if, sizeof(struct intr_frame));
@@ -200,15 +200,6 @@ static void __do_fork(void* aux)
      * TODO:       in include/filesys/file.h. Note that parent should not return
      * TODO:       from the fork() until this function successfully duplicates
      * TODO:       the resources of parent.*/
-
-    // for (int i = 0; i < FILE_MAX; i++) {
-    // 	struct file *file = parent->file_descrs[i];
-    // 	if (file == NULL)
-    // 		continue;
-    // 	if (file != stdin_f && file != stdout_f)
-    // 		file = file_duplicate(file);
-    // 	current->file_descrs[i] = file;
-    // }
     fd_to_file_for_remove(current, 0);
     fd_to_file_for_remove(current, 1);
     struct list_elem* iter;
@@ -231,6 +222,7 @@ static void __do_fork(void* aux)
         }
     }
 
+    // 부모 대기 해제
     sema_up(&current->load);
     process_init();
 
@@ -238,6 +230,7 @@ static void __do_fork(void* aux)
     if (succ)
         do_iret(&if_);
 error:
+    // fork 실패시 에러. -1 설정 안해줘서 1 방출
     current->exit_num = -1;
     sema_up(&current->load);
     thread_exit();
@@ -339,6 +332,7 @@ void process_exit(void)
     if (curr->parent != NULL)
         sema_down(&curr->waiting_parents);
     process_cleanup();
+    hash_destroy(&curr->spt.hash_table, NULL);
 }
 
 /* Free the current process's resources. */
@@ -460,6 +454,11 @@ static bool load(const char* file_name, struct intr_frame* if_)
         goto done;
     process_activate(thread_current());
 
+    // if (t->exec_file != NULL) {
+    // 	file_close(t->exec_file);
+    // 	t->exec_file = NULL;
+    // }
+    // 필요없음
     /* Open executable file. */
     file = filesys_open(file_name);
     if (file == NULL) {
@@ -571,6 +570,8 @@ static bool load(const char* file_name, struct intr_frame* if_)
     // Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
     if_->R.rdi = argc;
     if_->R.rsi = (uint64_t)(if_->rsp + 8);
+    /* TODO: Your code goes here.
+     * TODO: Implement argument passing (see project2/argument_passing.html). */
     // hex_dump(if_->rsp, if_->rsp, USER_STACK - if_->rsp, true);
     success = true;
 
@@ -731,21 +732,27 @@ static bool install_page(void* upage, void* kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool lazy_load_segment(struct page* page, void* aux)
+bool lazy_load_segment(struct page* page, void* aux)
 {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
-    struct lazy_load_arg* arg = (struct lazy_load_arg*)aux;
-    // 1 - 파일의 위치를 ofs으로 설정한다.
-    file_seek(arg->file, arg->ofs);
-    // 2 - 파일을 read_bytes만큼 물리 프레임에 읽어 들인다.
-    if (file_read(arg->file, page->frame->kva, arg->read_bytes) != (int)(arg->read_bytes)) {
-        palloc_free_page(page->frame->kva);
+    struct lazy_load_aux* arg = (struct lazy_load_aux*)aux;
+    bool flag = false;
+    if (!lock_held_by_current_thread(&filesys_lock)) {
+        lock_acquire(&filesys_lock);
+        flag = true;
+    }
+    if (file_read_at(arg->file, page->frame->kva, arg->page_read_bytes, arg->ofs) != (int)arg->page_read_bytes) {
+        if (flag)
+            lock_release(&filesys_lock);
+        palloc_free_page(page);
         return false;
     }
-    // 3 - 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
-    memset(page->frame->kva + arg->read_bytes, 0, arg->zero_bytes);
+    if (flag)
+        lock_release(&filesys_lock);
+    memset(page->frame->kva + arg->page_read_bytes, 0, arg->page_zero_bytes);
+    free(aux);
     return true;
 }
 
@@ -778,14 +785,19 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        struct lazy_load_arg* lazy_load_arg = (struct lazy_load_arg*)malloc(sizeof(struct lazy_load_arg));
-        lazy_load_arg->file = file;
-        lazy_load_arg->ofs = ofs;
-        lazy_load_arg->read_bytes = page_read_bytes;
-        lazy_load_arg->zero_bytes = page_zero_bytes;
-
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, lazy_load_arg))
+        struct lazy_load_aux* lazy_load_aux = malloc(sizeof(struct lazy_load_aux));
+        if (lazy_load_aux == NULL)
             return false;
+        lazy_load_aux->file = file;
+        lazy_load_aux->ofs = ofs;
+        lazy_load_aux->page_read_bytes = page_read_bytes;
+        lazy_load_aux->page_zero_bytes = page_zero_bytes;
+
+        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, lazy_load_aux)) {
+            free(lazy_load_aux);
+            return false;
+        }
+
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
@@ -804,6 +816,7 @@ static bool setup_stack(struct intr_frame* if_)
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
+
     if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) {
         if (vm_claim_page(stack_bottom)) {
             if_->rsp = USER_STACK;

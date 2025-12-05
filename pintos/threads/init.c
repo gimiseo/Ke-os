@@ -345,9 +345,19 @@ void power_off(void)
     print_stats();
 
     printf("Powering off...\n");
-    outw(0x604, 0x2000); /* Poweroff command for qemu */
+
+    /* Use isa-debug-exit device (most reliable for QEMU 7.0+) */
+    outb(0xf4, 0x00);
+
+    /* Try multiple shutdown methods for different QEMU versions */
+    outw(0x604, 0x2000);  /* QEMU (old) */
+    outw(0xB004, 0x2000); /* Bochs and QEMU (newer) */
+    outw(0x600, 0x2000);  /* ACPI shutdown */
+
+    /* If nothing works, halt */
+    printf("Failed to power off. Use Ctrl+A X to exit QEMU.\n");
     for (;;)
-        ;
+        asm volatile("hlt");
 }
 
 /* Print statistics about Pintos execution. */
