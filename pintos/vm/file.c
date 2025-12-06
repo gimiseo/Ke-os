@@ -55,6 +55,10 @@ static bool file_backed_swap_out(struct page* page)
 static void file_backed_destroy(struct page* page)
 {
     struct file_page* file_page = &page->file;
+    if (pml4_is_dirty(thread_current()->pml4, page->va)) {
+        file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs);
+        pml4_set_dirty(thread_current()->pml4, page->va, 0);
+    }
     pml4_clear_page(thread_current()->pml4, page->va);
 }
 
@@ -91,14 +95,18 @@ void* do_mmap(void* addr, size_t length, int writable, struct file* file, off_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         struct lazy_load_aux* lazy_load_aux = malloc(sizeof(struct lazy_load_aux));
-        if (lazy_load_aux == NULL)
+        if (lazy_load_aux == NULL) {
+            file_close(f);
             return NULL;
-        lazy_load_aux->file = file;
+        }
+
+        lazy_load_aux->file = f;
         lazy_load_aux->ofs = offset;
         lazy_load_aux->page_read_bytes = page_read_bytes;
         lazy_load_aux->page_zero_bytes = page_zero_bytes;
 
         if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_segment, lazy_load_aux)) {
+            file_close(f);
             free(lazy_load_aux);
             return NULL;
         }
@@ -118,6 +126,7 @@ void do_munmap(void* addr)
 {
     struct supplemental_page_table* spt = &thread_current()->spt;
     struct page* p = spt_find_page(spt, addr);
+    struct file* f = p->file.file;
     int count = p->mapped_page_count;
     for (int i = 0; i < count; i++) {
         if (p)
@@ -125,4 +134,5 @@ void do_munmap(void* addr)
         addr += PGSIZE;
         p = spt_find_page(spt, addr);
     }
+    file_close(f);
 }

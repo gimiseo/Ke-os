@@ -444,8 +444,8 @@ static bool load(const char* file_name, struct intr_frame* if_)
     bool success = false;
     int i;
     char* save;
-    char file_name_cp[128];
-    strlcpy(file_name_cp, file_name, 128);
+    char* file_name_cp = malloc(strlen(file_name) + 1);
+    strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
     strtok_r(file_name, " ", &save);
 
     /* Allocate and activate page directory. */
@@ -567,6 +567,7 @@ static bool load(const char* file_name, struct intr_frame* if_)
         curr += strlen(token) + 1;
         token = strtok_r(NULL, " ", &trash);
     }
+    free(file_name_cp);
     // Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
     if_->R.rdi = argc;
     if_->R.rsi = (uint64_t)(if_->rsp + 8);
