@@ -69,10 +69,14 @@ tid_t process_create_initd(const char* file_name)
     }
     copy_name[i] = '\0';
 
+    enum intr_level old_level = intr_disable();
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(copy_name, PRI_DEFAULT, initd, fn_copy);
-    if (tid == TID_ERROR)
+    if (tid == TID_ERROR) {
+        intr_set_level(old_level);
         palloc_free_page(fn_copy);
+    }
+    intr_set_level(old_level);
     return tid;
 }
 
@@ -173,6 +177,7 @@ static void __do_fork(void* aux)
     struct intr_frame* parent_if;
     bool succ = true;
 
+    enum intr_level old_level = intr_disable();
     // aux의 tf를 넘겨준다
     parent_if = &parent->parent_if;
     /* 1. Read the cpu context to local stack. */
@@ -221,6 +226,7 @@ static void __do_fork(void* aux)
             list_insert_ordered(&(current->descrs_t), &(child_descript->desc_elem), cmp_fd_less, NULL);
         }
     }
+    intr_set_level(old_level);
 
     // 부모 대기 해제
     sema_up(&current->load);
@@ -232,6 +238,7 @@ static void __do_fork(void* aux)
 error:
     // fork 실패시 에러. -1 설정 안해줘서 1 방출
     current->exit_num = -1;
+    intr_set_level(old_level);
     sema_up(&current->load);
     thread_exit();
 }

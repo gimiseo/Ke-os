@@ -66,6 +66,12 @@ struct page {
 struct frame {
     void* kva;
     struct page* page;
+    struct list_elem frame_elem;
+};
+struct slot {
+    struct page* page;
+    uint32_t slot_no;
+    struct list_elem swap_elem;
 };
 
 /* The function table for page operations.
@@ -109,5 +115,9 @@ void vm_dealloc_page(struct page* page);
 bool vm_claim_page(void* va);
 enum vm_type page_get_type(struct page* page);
 void hash_desroy_action(struct hash_elem* hash_elem, void* aux);
+extern struct list swap_table;
+extern struct list frame_table;
+extern struct lock swap_table_lock;
+extern struct lock frame_table_lock;
 
 #endif /* VM_VM_H */

@@ -4,6 +4,7 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "lib/debug.h"
+#include "threads/mmu.h"
 
 static bool file_backed_swap_in(struct page* page, void* kva);
 static bool file_backed_swap_out(struct page* page);
@@ -48,9 +49,18 @@ static bool file_backed_swap_in(struct page* page, void* kva)
 /* Swap out the page by writeback contents to the file. */
 static bool file_backed_swap_out(struct page* page)
 {
-    struct file_page* file_page = &page->file;
-}
+    struct file_page* file_page UNUSED = &page->file;
+    if (pml4_is_dirty(thread_current()->pml4, page->va)) {
+        file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs);
+        pml4_set_dirty(thread_current()->pml4, page->va, 0);
+    }
 
+    // 페이지와 프레임의 연결 끊기
+    page->frame->page = NULL;
+    page->frame = NULL;
+    pml4_clear_page(thread_current()->pml4, page->va);
+    return true;
+}
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void file_backed_destroy(struct page* page)
 {
@@ -134,5 +144,5 @@ void do_munmap(void* addr)
         addr += PGSIZE;
         p = spt_find_page(spt, addr);
     }
-    file_close(f);
+    // file_close(f);
 }

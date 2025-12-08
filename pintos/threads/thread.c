@@ -206,7 +206,6 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
     init_thread(t, name, priority);
     tid = t->tid = allocate_tid();
 
-    // 하....,,,,,....
     struct descriptor* stdin_descript = calloc(1, sizeof(struct descriptor));
     if (stdin_descript == NULL) {
         return -1;
